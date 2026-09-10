@@ -585,3 +585,9 @@ class RedGymEnv(Env):
             return self.essential_map_locations[map_idx]
         else:
             return -1
+
+    def close(self):
+        if getattr(self, "pyboy", None) is not None:
+            self.pyboy.stop(False)
+            self.pyboy = None
+        super().close()
