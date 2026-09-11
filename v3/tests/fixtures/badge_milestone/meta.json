@@ -1,0 +1,29 @@
+{
+  "init_state": "init.state",
+  "baseline": "init",
+  "n_snapshots": 3,
+  "description": "badge 0x01 then 0x03",
+  "expected": {
+    "score": 201.0,
+    "components": {
+      "badges": 2,
+      "events": 0,
+      "dex_caught": 0,
+      "dex_seen": 0,
+      "unique_maps": 1,
+      "level_sum_capped": 0
+    },
+    "delta_from_first": {
+      "score": 200.0,
+      "components": {
+        "badges": 2,
+        "events": 0,
+        "dex_caught": 0,
+        "dex_seen": 0,
+        "unique_maps": 0,
+        "level_sum_capped": 0
+      }
+    },
+    "per_badge_score_delta": 100
+  }
+}

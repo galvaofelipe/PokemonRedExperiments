@@ -48,3 +48,30 @@ EVENT_BOUGHT_MUSEUM_TICKET = (0xD754, 0)
 
 # wEnemyMon1Level … wEnemyMon6Level — pokered.sym 00:d8c5, d8f1, d91d, d949, d975, d9a1
 W_ENEMY_MON_LEVEL = (0xD8C5, 0xD8F1, 0xD91D, 0xD949, 0xD975, 0xD9A1)
+
+# NUM_POKEMON — pokedex_constants.asm (dex flag arrays are 19 bytes = 152 bits, last bit unused)
+NUM_POKEMON = 151
+
+# wPokedexOwned — pokered.sym 00:d2f7 (flag_array NUM_POKEMON)
+W_POKEDEX_OWNED_START = 0xD2F7
+W_POKEDEX_OWNED_END_INCLUSIVE = 0xD309
+
+# wPokedexSeen — pokered.sym 00:d30a (flag_array NUM_POKEMON)
+W_POKEDEX_SEEN_START = 0xD30A
+W_POKEDEX_SEEN_END_INCLUSIVE = 0xD31C
+
+# NUM_MAPS — map_constants.asm (last valid map id is AGATHAS_ROOM $F7; 0xFF appears in transitions)
+NUM_MAPS = 0xF8
+
+# wPlayTimeHours … wPlayTimeFrames — pokered.sym 00:da41-00:da45 (plain binary; D16 split timing)
+W_PLAY_TIME_HOURS = 0xDA41
+W_PLAY_TIME_MAXED = 0xDA42
+W_PLAY_TIME_MINUTES = 0xDA43
+W_PLAY_TIME_SECONDS = 0xDA44
+W_PLAY_TIME_FRAMES = 0xDA45
+
+# RAM snapshot window: scorer input (D5) and telemetry contract (D7/D16).
+# Covers wPartyCount through wPlayTimeFrames; index into a snapshot as addr - SNAPSHOT_BASE.
+SNAPSHOT_BASE = 0xD163
+SNAPSHOT_END_INCLUSIVE = 0xDA45
+SNAPSHOT_SIZE = SNAPSHOT_END_INCLUSIVE - SNAPSHOT_BASE + 1  # 2275

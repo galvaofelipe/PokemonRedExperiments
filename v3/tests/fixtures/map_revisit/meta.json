@@ -1,0 +1,18 @@
+{
+  "init_state": "init.state",
+  "baseline": "init",
+  "n_snapshots": 9,
+  "description": "map revisits add nothing; 0xFF ignored",
+  "expected": {
+    "score": 3.0,
+    "components": {
+      "badges": 0,
+      "events": 0,
+      "dex_caught": 0,
+      "dex_seen": 0,
+      "unique_maps": 3,
+      "level_sum_capped": 0
+    },
+    "unique_maps": 3
+  }
+}

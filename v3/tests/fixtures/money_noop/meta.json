@@ -1,0 +1,28 @@
+{
+  "init_state": "has_pokedex.state",
+  "baseline": "has_pokedex",
+  "n_snapshots": 2,
+  "description": "money change only; score must not move",
+  "expected": {
+    "score": 5.1,
+    "components": {
+      "badges": 0,
+      "events": 0,
+      "dex_caught": 1,
+      "dex_seen": 3,
+      "unique_maps": 1,
+      "level_sum_capped": 6
+    },
+    "delta_from_first": {
+      "score": 0.0,
+      "components": {
+        "badges": 0,
+        "events": 0,
+        "dex_caught": 0,
+        "dex_seen": 0,
+        "unique_maps": 0,
+        "level_sum_capped": 0
+      }
+    }
+  }
+}

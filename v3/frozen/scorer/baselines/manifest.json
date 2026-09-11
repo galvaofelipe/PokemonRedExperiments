@@ -1,0 +1,18 @@
+{
+  "fast_text_start": {
+    "file": "fast_text_start.bin",
+    "sha256": "7b6436b0c98f62380866d9432c2af0ee08ce16a171bda6951aecd95ee1307d61"
+  },
+  "has_pokedex": {
+    "file": "has_pokedex.bin",
+    "sha256": "3496251dea37e15ac17503d8234f2858de528a7c85064ba48d8d066121ccbe16"
+  },
+  "has_pokedex_nballs": {
+    "file": "has_pokedex_nballs.bin",
+    "sha256": "3496251dea37e15ac17503d8234f2858de528a7c85064ba48d8d066121ccbe16"
+  },
+  "init": {
+    "file": "init.bin",
+    "sha256": "7b6436b0c98f62380866d9432c2af0ee08ce16a171bda6951aecd95ee1307d61"
+  }
+}

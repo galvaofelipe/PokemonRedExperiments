@@ -1,0 +1,17 @@
+{
+  "init_state": "init.state",
+  "baseline": "init",
+  "n_snapshots": 5,
+  "description": "60 events + dex + maps + level cap, no badge",
+  "expected": {
+    "score": 93.0,
+    "components": {
+      "badges": 0,
+      "events": 60,
+      "dex_caught": 8,
+      "dex_seen": 4,
+      "unique_maps": 5,
+      "level_sum_capped": 100
+    }
+  }
+}

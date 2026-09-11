@@ -1,0 +1,17 @@
+{
+  "init_state": "init.state",
+  "baseline": "init",
+  "n_snapshots": 1,
+  "description": "badge + 10 events",
+  "expected": {
+    "score": 111.0,
+    "components": {
+      "badges": 1,
+      "events": 10,
+      "dex_caught": 0,
+      "dex_seen": 0,
+      "unique_maps": 1,
+      "level_sum_capped": 0
+    }
+  }
+}

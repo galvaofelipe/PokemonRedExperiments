@@ -1,0 +1,28 @@
+{
+  "init_state": "init.state",
+  "baseline": "init",
+  "n_snapshots": 3,
+  "description": "HP heal/damage only; score must not move",
+  "expected": {
+    "score": 3.0,
+    "components": {
+      "badges": 0,
+      "events": 0,
+      "dex_caught": 0,
+      "dex_seen": 0,
+      "unique_maps": 1,
+      "level_sum_capped": 20
+    },
+    "delta_from_first": {
+      "score": 0.0,
+      "components": {
+        "badges": 0,
+        "events": 0,
+        "dex_caught": 0,
+        "dex_seen": 0,
+        "unique_maps": 0,
+        "level_sum_capped": 0
+      }
+    }
+  }
+}

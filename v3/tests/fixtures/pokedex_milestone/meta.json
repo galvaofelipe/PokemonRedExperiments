@@ -1,0 +1,28 @@
+{
+  "init_state": "init.state",
+  "baseline": "init",
+  "n_snapshots": 2,
+  "description": "init then has_pokedex milestone",
+  "expected": {
+    "score": 17.1,
+    "components": {
+      "badges": 0,
+      "events": 11,
+      "dex_caught": 1,
+      "dex_seen": 3,
+      "unique_maps": 2,
+      "level_sum_capped": 6
+    },
+    "delta_from_first": {
+      "score": 16.1,
+      "components": {
+        "badges": 0,
+        "events": 11,
+        "dex_caught": 1,
+        "dex_seen": 3,
+        "unique_maps": 1,
+        "level_sum_capped": 6
+      }
+    }
+  }
+}

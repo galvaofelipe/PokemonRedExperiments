@@ -1,0 +1,18 @@
+{
+  "init_state": "init.state",
+  "baseline": "init",
+  "n_snapshots": 2,
+  "description": "level sum capped at 100; running max holds on drop",
+  "expected": {
+    "score": 11.0,
+    "components": {
+      "badges": 0,
+      "events": 0,
+      "dex_caught": 0,
+      "dex_seen": 0,
+      "unique_maps": 1,
+      "level_sum_capped": 100
+    },
+    "level_sum_capped": 100
+  }
+}
