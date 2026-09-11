@@ -8,13 +8,19 @@ from __future__ import annotations
 
 import argparse
 import csv
+import html
 import json
+import math
+from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 JOBS = ROOT / "jobs"
 REFRESH_S = 10
+CHART_SAMPLES = 180
+MA_WINDOW = 10
+SPS_YMAX_FLOOR = 900.0
 
 
 def arg_map(args: list[str]) -> dict[str, str | bool]:
@@ -84,11 +90,16 @@ def load_jobs() -> list[dict]:
                 state = folder.name
             session = str(amap.get("session-path") or "")
             csv_path = ROOT / session / "resource_log.csv" if session else None
-            perf = last_perf(csv_path) if csv_path else {}
             series = load_series(csv_path) if csv_path else []
+            perf = series[-1] if series else {}
             target = planned_steps(amap)
-            steps = _as_int(perf.get("timesteps"))
+            steps = _as_int(perf.get("steps"))
             pct = (100.0 * steps / target) if target and steps is not None else None
+            assumed = amap.get("sps")
+            try:
+                assumed_sps = float(assumed) if assumed not in (None, "", True, False) else 720.0
+            except (TypeError, ValueError):
+                assumed_sps = 720.0
             rows.append(
                 {
                     "file": path.name,
@@ -97,11 +108,14 @@ def load_jobs() -> list[dict]:
                     "session": session,
                     "backup": str(amap.get("backup") or ""),
                     "target": target,
+                    "assumed_sps": assumed_sps,
                     "start": status.get("start", ""),
                     "end": status.get("end", ""),
                     "exit": status.get("exit", ""),
                     "perf": perf,
                     "series": series,
+                    "peak_rss": max((p["rss"] for p in series), default=None),
+                    "ma_sps": moving_avg_series(series, done=state == "done"),
                     "pct": pct,
                 }
             )
@@ -119,11 +133,6 @@ def _as_int(value) -> int | None:
         return None
 
 
-def last_perf(csv_path: Path) -> dict[str, str]:
-    rows = list(iter_csv(csv_path))
-    return rows[-1] if rows else {}
-
-
 def iter_csv(csv_path: Path) -> list[dict[str, str]]:
     if csv_path is None or not csv_path.exists():
         return []
@@ -131,37 +140,81 @@ def iter_csv(csv_path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(f))
 
 
-def load_series(csv_path: Path, limit: int = 180) -> list[dict]:
-    rows = iter_csv(csv_path)[-limit:]
+def load_series(csv_path: Path) -> list[dict]:
     out = []
-    for row in rows:
+    for row in iter_csv(csv_path):
         try:
             out.append(
                 {
                     "wall": float(row["wall_s"]),
-                    "sps": float(row["avg_sps"]),
+                    "avg_sps": float(row["avg_sps"]),
+                    "instant_sps": float(row["instant_sps"]),
                     "rss": float(row["rss_mb"]),
+                    "cpu": float(row.get("cpu_pct") or 0),
+                    "speedup": float(row.get("per_env_speedup") or 0),
                     "steps": float(row["timesteps"]),
                 }
             )
-        except (KeyError, ValueError):
+        except (KeyError, ValueError, TypeError):
             continue
     return out
 
 
-def sparkline(points: list[float], w=240, h=48) -> str:
+def _chart_rows(series: list[dict], done: bool) -> list[dict]:
+    rows = [p for p in series if p["steps"] > 0]
+    if (
+        done
+        and rows
+        and rows[-1]["instant_sps"] < max(rows[-1]["avg_sps"] * 0.25, 200)
+    ):
+        rows = rows[:-1]
+    return rows
+
+
+def moving_avg_series(series: list[dict], done: bool = False, window: int = MA_WINDOW) -> list[float]:
+    instants = [p["instant_sps"] for p in _chart_rows(series, done)]
+    if not instants:
+        return []
+    out = []
+    running = 0.0
+    for i, value in enumerate(instants):
+        running += value
+        if i >= window:
+            running -= instants[i - window]
+        out.append(running / min(i + 1, window))
+    return out[-CHART_SAMPLES:]
+
+
+def sparkline(
+    points: list[float],
+    ymin: float,
+    ymax: float,
+    target: float | None = None,
+    title: str = "",
+    w: int = 240,
+    h: int = 48,
+) -> str:
     if len(points) < 2:
         return f'<svg width="{w}" height="{h}"></svg>'
-    lo, hi = min(points), max(points)
-    span = (hi - lo) or 1.0
+    span = (ymax - ymin) or 1.0
     step = (w - 4) / (len(points) - 1)
-    coords = []
-    for i, y in enumerate(points):
-        px = 2 + i * step
-        py = h - 4 - ((y - lo) / span) * (h - 8)
-        coords.append(f"{px:.1f},{py:.1f}")
+
+    def py(value: float) -> float:
+        clamped = min(max(value, ymin), ymax)
+        return h - 4 - ((clamped - ymin) / span) * (h - 8)
+
+    coords = [f"{2 + i * step:.1f},{py(y):.1f}" for i, y in enumerate(points)]
+    target_svg = ""
+    if target is not None and ymin < target < ymax:
+        y = py(target)
+        target_svg = (
+            f'<line x1="2" x2="{w - 2}" y1="{y:.1f}" y2="{y:.1f}" '
+            f'stroke="#94a3b8" stroke-dasharray="3 3" stroke-width="1"/>'
+        )
+    title_svg = f"<title>{html.escape(title)}</title>" if title else ""
     return (
         f'<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}">'
+        f"{title_svg}{target_svg}"
         f'<polyline fill="none" stroke="#1d4ed8" stroke-width="1.5" '
         f'points="{" ".join(coords)}"/></svg>'
     )
@@ -179,38 +232,140 @@ def fmt(value, digits=0, suffix="") -> str:
     return f"{n:,.{digits}f}{suffix}"
 
 
+def fmt_ram(mb, peak_mb=None) -> str:
+    if mb in (None, ""):
+        return "—"
+
+    def one(value) -> str:
+        n = float(value)
+        if n >= 1024:
+            return f"{n / 1024:.1f} GB"
+        return f"{n:,.0f} MB"
+
+    text = one(mb)
+    if peak_mb not in (None, ""):
+        text += f" (peak {one(peak_mb)})"
+    return text
+
+
+def fmt_duration(seconds: float | None) -> str:
+    if seconds is None or seconds < 0:
+        return "—"
+    if seconds < 90:
+        return f"{seconds:.0f}s"
+    if seconds < 90 * 60:
+        return f"{seconds / 60:.1f} min"
+    return f"{seconds / 3600:.1f}h"
+
+
+def parse_iso(value: str) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def fmt_clock(dt: datetime, now: datetime) -> str:
+    if dt.date() == now.date():
+        return dt.strftime("%H:%M")
+    return dt.strftime("%d %b %H:%M")
+
+
+def pct_cell(job: dict) -> str:
+    pct = job["pct"]
+    if pct is None:
+        return "—"
+    steps = _as_int(job["perf"].get("steps") if job["perf"] else None)
+    target = job["target"]
+    if target and steps is not None and steps > target:
+        extra = steps - target
+        return f"100%<div class='muted'>+{extra:,} overshoot</div>"
+    return f"{pct:.1f}%"
+
+
+def time_cell(job: dict, now: datetime) -> str:
+    start = parse_iso(job.get("start") or "")
+    end = parse_iso(job.get("end") or "")
+    perf = job["perf"]
+    state = job["state"]
+    wall = float(perf["wall"]) if perf.get("wall") not in (None, "") else None
+
+    lines = []
+    if start:
+        lines.append(f"started {fmt_clock(start, now)}")
+    if state == "done" and start and end:
+        lines.append(fmt_duration((end - start).total_seconds()) + " elapsed")
+    elif wall is not None:
+        lines.append(fmt_duration(wall) + " elapsed")
+
+    remaining = None
+    target = job["target"]
+    steps = _as_int(perf.get("steps") if perf else None)
+    avg = perf.get("avg_sps")
+    if state == "running" and target and steps is not None and avg:
+        leftover = target - steps
+        if leftover > 0 and avg > 0:
+            remaining = leftover / float(avg)
+            eta_at = now + timedelta(seconds=remaining)
+            lines.append(f"ETA {fmt_clock(eta_at, now)} ({fmt_duration(remaining)})")
+
+    if not lines:
+        return "—"
+    return lines[0] + "".join(f'<div class="muted">{line}</div>' for line in lines[1:])
+
+
+def sps_ymax(jobs: list[dict]) -> float:
+    points = [v for job in jobs for v in job.get("ma_sps") or []]
+    raw = max(points) if points else 0.0
+    return max(SPS_YMAX_FLOOR, float(math.ceil(raw / 100.0) * 100.0))
+
+
 def render(jobs: list[dict]) -> str:
     lock = JOBS / ".queue.lock"
     lock_note = "queue idle"
     if lock.exists():
-        pid = lock.read_text().strip()
-        lock_note = f"queue lock pid {pid}"
+        lock_note = f"queue lock pid {lock.read_text().strip()}"
 
+    now = datetime.now().astimezone()
+    ymin = 0.0
+    ymax = sps_ymax(jobs)
     cards = []
     for job in jobs:
         perf = job["perf"]
-        series = job["series"]
-        sps_svg = sparkline([p["sps"] for p in series]) if series else ""
-        rss_svg = sparkline([p["rss"] for p in series]) if series else ""
-        pct = f"{job['pct']:.1f}%" if job["pct"] is not None else "—"
-        wall_m = float(perf["wall_s"]) / 60 if perf.get("wall_s") else None
+        ma = job["ma_sps"]
+        last_ma = ma[-1] if ma else None
+        this_min = min(ma) if ma else None
+        this_max = max(ma) if ma else None
+        title = (
+            f"axis {ymin:.0f}–{ymax:.0f} · this {this_min:.0f}–{this_max:.0f} · "
+            f"last {last_ma:.0f} · target {job['assumed_sps']:.0f}"
+            if last_ma is not None
+            else ""
+        )
+        sps_svg = sparkline(ma, ymin, ymax, target=job["assumed_sps"], title=title) if ma else ""
+        caption = (
+            f"last {last_ma:.0f} · axis {ymin:.0f}–{ymax:.0f}"
+            if last_ma is not None
+            else "sps ma"
+        )
         cards.append(
             f"""
             <tr class="state-{job['state']}">
-              <td><strong>{job['name']}</strong><div class="muted">{job['file']}</div></td>
-              <td><span class="pill">{job['state']}</span></td>
-              <td>{pct}</td>
-              <td>{fmt(perf.get('timesteps'))} / {fmt(job['target'])}</td>
-              <td>{fmt(perf.get('avg_sps'))}<div class="muted">inst {fmt(perf.get('instant_sps'))}</div></td>
-              <td>{fmt(wall_m, 1)} min</td>
-              <td>{fmt(perf.get('rss_mb'))} MB<div class="muted">cpu {fmt(perf.get('cpu_pct'))}%</div></td>
-              <td>{fmt(perf.get('per_env_speedup'), 1)}x</td>
-              <td class="chart">{sps_svg}<div class="muted">avg sps</div></td>
-              <td class="chart">{rss_svg}<div class="muted">rss</div></td>
+              <td><strong>{html.escape(job['name'])}</strong><div class="muted">{html.escape(job['file'])}</div></td>
+              <td><span class="pill">{html.escape(job['state'])}</span></td>
+              <td>{pct_cell(job)}</td>
+              <td>{fmt(perf.get('steps'))} / {fmt(job['target'])}</td>
+              <td>{fmt(perf.get('avg_sps'))}{f'<div class="muted">~{fmt(last_ma)} ma</div>' if last_ma is not None else ''}</td>
+              <td>{time_cell(job, now)}</td>
+              <td>{fmt_ram(perf.get('rss'), job.get('peak_rss'))}{f'<div class="muted">cpu {fmt(perf.get("cpu"))}%</div>' if perf.get('cpu') not in (None, '') else ''}</td>
+              <td>{fmt(perf.get('speedup'), 1)}x</td>
+              <td class="chart">{sps_svg}<div class="muted">{caption}</div></td>
             </tr>"""
         )
 
-    body = "\n".join(cards) or '<tr><td colspan="10">No jobs found.</td></tr>'
+    body = "\n".join(cards) or '<tr><td colspan="9">No jobs found.</td></tr>'
     return f"""<!doctype html>
 <html>
 <head>
@@ -238,7 +393,7 @@ def render(jobs: list[dict]) -> str:
     <thead>
       <tr>
         <th>Job</th><th>State</th><th>%</th><th>Steps</th><th>SPS</th>
-        <th>Wall</th><th>RAM / CPU</th><th>Game x</th><th></th><th></th>
+        <th>Time</th><th>RAM / CPU</th><th>Game x</th><th>SPS (5 min ma)</th>
       </tr>
     </thead>
     <tbody>
@@ -255,13 +410,13 @@ class Handler(BaseHTTPRequestHandler):
         if self.path not in {"/", "/index.html"}:
             self.send_error(404)
             return
-        html = render(load_jobs()).encode()
+        html_out = render(load_jobs()).encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
-        self.send_header("Content-Length", str(len(html)))
+        self.send_header("Content-Length", str(len(html_out)))
         self.end_headers()
-        self.wfile.write(html)
+        self.wfile.write(html_out)
 
     def log_message(self, fmt, *args):
         return
