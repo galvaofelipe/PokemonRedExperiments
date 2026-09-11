@@ -115,11 +115,21 @@ def _make_hit_record(name, step, clock, initial):
 
 
 def _apply_segment_times(achieved_by_name, order, start_frames):
+    achieved = [
+        (route_idx, name, achieved_by_name[name])
+        for route_idx, name in enumerate(order)
+        if name in achieved_by_name
+    ]
+    completion_order = sorted(
+        achieved,
+        key=lambda item: (
+            item[2]["game_time_frames"],
+            item[2]["first_hit_step"],
+            item[0],
+        ),
+    )
     prev_frames = start_frames
-    for name in order:
-        if name not in achieved_by_name:
-            continue
-        entry = achieved_by_name[name]
+    for _route_idx, _name, entry in completion_order:
         seg_frames = entry["game_time_frames"] - prev_frames
         h, m, s, f = frames_to_game_time(seg_frames)
         entry["segment_time"] = format_game_time(h, m, s)

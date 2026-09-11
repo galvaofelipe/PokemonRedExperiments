@@ -38,6 +38,7 @@ CLOCK_MINUTES_OFF = W_PLAY_TIME_MINUTES - SNAPSHOT_BASE
 CLOCK_SECONDS_OFF = W_PLAY_TIME_SECONDS - SNAPSHOT_BASE
 CLOCK_FRAMES_OFF = W_PLAY_TIME_FRAMES - SNAPSHOT_BASE
 MT_MOON_EVENT_ADDR = 0xD7F6
+HM02_FLY_ADDR = 0xD7E0
 
 
 def _base_snapshot():
@@ -164,6 +165,45 @@ def test_initial_at_step_0():
         assert achieved[0]["name"] == "Brock"
         assert achieved[0]["first_hit_step"] == 0
         assert achieved[0]["initial"] is True
+
+
+def test_segment_time_completion_order():
+    """Lt. Surge before HM02 Fly in game time but after in route order."""
+    start_frames = 10 * 60 * 60
+    surge_frames = 20 * 60 * 60
+    fly_frames = 30 * 60 * 60
+
+    with tempfile.TemporaryDirectory() as tmp:
+        snaps = []
+        for step in range(12):
+            snap = bytearray(_base_snapshot())
+            if step == 0:
+                _set_clock(snap, 0, 10, 0, 0)
+            elif step == 5:
+                _set_bit(snap, W_OBTAINED_BADGES, 2)
+                _set_clock(snap, 0, 20, 0, 0)
+            elif step == 11:
+                _set_bit(snap, HM02_FLY_ADDR, 6)
+                _set_clock(snap, 0, 30, 0, 0)
+            else:
+                _set_clock(snap, 0, 10, 0, 0)
+            snaps.append(bytes(snap))
+
+        tel_path = _write_episode(
+            tmp,
+            "test_segment_completion",
+            [(0, s) for s in snaps],
+        )
+        achieved = extract_splits_from_telemetry(tel_path)
+        by_name = {a["name"]: a for a in achieved}
+
+        assert set(by_name) == {"Lt. Surge", "HM02 Fly"}
+        for entry in achieved:
+            assert entry["segment_time_frames"] >= 0
+
+        assert by_name["Lt. Surge"]["segment_time_frames"] == surge_frames - start_frames
+        assert by_name["HM02 Fly"]["segment_time_frames"] == fly_frames - surge_frames
+        assert by_name["Lt. Surge"]["game_time_frames"] < by_name["HM02 Fly"]["game_time_frames"]
 
 
 def _synthetic_episode(score, components, map_ids, telemetry_file):
