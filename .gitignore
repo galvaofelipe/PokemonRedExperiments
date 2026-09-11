@@ -8,6 +8,12 @@ raw_documentation
 *.pem
 _autoplay.mp4
 session_*
+runs_*/
+poke_*_steps.zip
+poke_ppo_*/
+histogram/
+resource_log.csv
+resource_summary.txt
 .env
 PokemonRed.gb.state
 venv*
