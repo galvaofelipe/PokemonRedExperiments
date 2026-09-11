@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Repo-local pre-commit dispatcher: global secret scan, then Frozen-path guard.
+#
+# Install (this clone only — does not touch ~/.githooks or global git config):
+#   git config core.hooksPath v3/bin/git-hooks
+#
+# Relative hooksPath resolves from the common git directory (worktree root).
+# If committing from a subdirectory fails to find this hook, use an absolute path:
+#   git config core.hooksPath "$(git rev-parse --show-toplevel)/v3/bin/git-hooks"
+
+set -e
+
+GLOBAL="$HOME/.githooks/pre-commit"
+if [ -x "$GLOBAL" ]; then
+  "$GLOBAL"
+fi
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+exec python3 "$REPO_ROOT/v3/bin/frozen_manifest.py" pre-commit

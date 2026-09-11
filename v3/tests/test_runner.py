@@ -13,7 +13,12 @@ V3_DIR = Path(__file__).resolve().parents[1]
 BIN_DIR = V3_DIR / "bin"
 sys.path.insert(0, str(BIN_DIR))
 
+import frozen_manifest  # noqa: E402
 import runner  # noqa: E402
+
+
+def _manifest_ok():
+    return frozen_manifest.VerifyResult(ok=True)
 
 
 def _minimal_config(tmp: Path) -> runner.RunnerConfig:
@@ -186,11 +191,12 @@ def test_build_eval_cmd_passthrough():
     assert "--seed-filter" in cmd
 
 
+@patch.object(runner, "verify_frozen_manifest", return_value=_manifest_ok())
 @patch.object(runner, "dirty_tracked_paths", return_value=[])
 @patch.object(runner, "git_head_commit", return_value="abc123")
 @patch.object(runner, "run_train")
 @patch.object(runner, "run_eval")
-def test_status_transition_done(mock_run_eval, mock_run_train, _git, _dirty, tmp_path):
+def test_status_transition_done(mock_run_eval, mock_run_train, _git, _dirty, _manifest, tmp_path):
     cfg = _minimal_config(tmp_path)
     cfg.runs_dir.mkdir(parents=True, exist_ok=True)
 
@@ -235,10 +241,11 @@ def test_status_transition_done(mock_run_eval, mock_run_train, _git, _dirty, tmp
     assert meta["commit"] == "abc123"
 
 
+@patch.object(runner, "verify_frozen_manifest", return_value=_manifest_ok())
 @patch.object(runner, "dirty_tracked_paths", return_value=[])
 @patch.object(runner, "git_head_commit", return_value="abc123")
 @patch.object(runner, "run_train")
-def test_train_crash_goes_failed(mock_run_train, _git, _dirty, tmp_path):
+def test_train_crash_goes_failed(mock_run_train, _git, _dirty, _manifest, tmp_path):
     cfg = _minimal_config(tmp_path)
     job_data = _valid_job(budget={"total_timesteps": 100}, eval={"enabled": False})
     claimed = cfg.running_dir / "host-crash.json"
@@ -255,11 +262,12 @@ def test_train_crash_goes_failed(mock_run_train, _git, _dirty, tmp_path):
     assert (cfg.failed_dir / "host-crash.reason.txt").exists()
 
 
+@patch.object(runner, "verify_frozen_manifest", return_value=_manifest_ok())
 @patch.object(runner, "dirty_tracked_paths", return_value=[])
 @patch.object(runner, "git_head_commit", return_value="abc123")
 @patch.object(runner, "run_train")
 @patch.object(runner, "run_eval")
-def test_eval_skipped_for_probe(mock_run_eval, mock_run_train, _git, _dirty, tmp_path):
+def test_eval_skipped_for_probe(mock_run_eval, mock_run_train, _git, _dirty, _manifest, tmp_path):
     cfg = _minimal_config(tmp_path)
     job_data = _valid_job(run_type="probe", eval={})
     claimed = cfg.running_dir / "host-probe.json"
@@ -276,10 +284,11 @@ def test_eval_skipped_for_probe(mock_run_eval, mock_run_train, _git, _dirty, tmp
     assert list(cfg.done_dir.glob("*.json"))
 
 
+@patch.object(runner, "verify_frozen_manifest", return_value=_manifest_ok())
 @patch.object(runner, "dirty_tracked_paths", return_value=[])
 @patch.object(runner, "git_head_commit", return_value="abc123")
 @patch.object(runner, "run_train")
-def test_no_checkpoint_eval_enabled_fails(mock_run_train, _git, _dirty, tmp_path):
+def test_no_checkpoint_eval_enabled_fails(mock_run_train, _git, _dirty, _manifest, tmp_path):
     cfg = _minimal_config(tmp_path)
     job_data = _valid_job(budget={"total_timesteps": 100}, eval={"enabled": True})
     claimed = cfg.running_dir / "host-nozip.json"
@@ -295,6 +304,28 @@ def test_no_checkpoint_eval_enabled_fails(mock_run_train, _git, _dirty, tmp_path
     assert list(cfg.failed_dir.glob("*.json"))
     reason = (cfg.failed_dir / "host-nozip.reason.txt").read_text()
     assert "checkpoint" in reason.lower()
+
+
+@patch.object(runner, "verify_frozen_manifest", return_value=_manifest_ok())
+@patch.object(runner, "dirty_tracked_paths", return_value=[])
+def test_process_job_fails_on_manifest_mismatch(_dirty, _manifest, tmp_path):
+    cfg = _minimal_config(tmp_path)
+    job_data = _valid_job(budget={"total_timesteps": 100}, eval={"enabled": False})
+    claimed = cfg.running_dir / "host-manifest.json"
+    claimed.write_text(json.dumps(job_data))
+
+    bad = frozen_manifest.VerifyResult(
+        ok=False,
+        hash_mismatches=["v3/frozen/ram_map.py"],
+    )
+    with patch.object(runner, "verify_frozen_manifest", return_value=bad):
+        runner.process_job(cfg, claimed)
+
+    assert list(cfg.failed_dir.glob("*.json"))
+    reason = (cfg.failed_dir / "host-manifest.reason.txt").read_text()
+    assert "frozen manifest mismatch" in reason
+    assert "v3/frozen/ram_map.py" in reason
+    assert not list(cfg.runs_dir.glob("*"))
 
 
 def test_invalid_job_goes_failed(tmp_path):

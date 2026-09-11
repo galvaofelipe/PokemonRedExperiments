@@ -36,6 +36,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from frozen_manifest import verify as verify_frozen_manifest
+
 # Keep in sync with v3/train.py
 SPS_PER_ENV = 90
 
@@ -618,6 +620,15 @@ def process_job(
     dirty = dirty_tracked_paths(repo_root)
     if dirty:
         fail_job(config, claimed_path, f"dirty tree (commit first): {', '.join(dirty)}")
+        return
+
+    manifest_result = verify_frozen_manifest(repo_root)
+    if not manifest_result.ok:
+        fail_job(
+            config,
+            claimed_path,
+            f"frozen manifest mismatch: {manifest_result.summary()}",
+        )
         return
 
     started_at = datetime.now(timezone.utc)
