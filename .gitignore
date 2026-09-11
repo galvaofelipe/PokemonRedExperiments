@@ -32,4 +32,8 @@ AGENTS.md
 CONTEXT.md
 .kimi-code/
 v3/runs/
+v3/jobs/done/
+v3/jobs/failed/
+v3/jobs/running/
+v3/jobs/.runner.lock
 INBOX.md

@@ -1,0 +1,14 @@
+{
+  "queue": {
+    "queued_dir": "jobs/queued",
+    "running_dir": "jobs/running",
+    "done_dir": "jobs/done",
+    "failed_dir": "jobs/failed",
+    "lockfile": "jobs/.runner.lock"
+  },
+  "runs_dir": "runs",
+  "default_num_envs": 6,
+  "status_refresh_seconds": 15,
+  "train_log": "train.log",
+  "eval_log": "eval.log"
+}
