@@ -1,0 +1,19 @@
+{
+  "eval_suite_version": "1.0.0",
+  "step_cap": 16384,
+  "seeds_per_state": 3,
+  "states": [
+    {
+      "name": "fresh_game",
+      "file": "fast_text_start.state",
+      "sha256": "bf60d38d16951a193a1f00ba1db837bfb90670c58e9a9567cb222111760de06f",
+      "baseline": "fast_text_start"
+    },
+    {
+      "name": "early_progression",
+      "file": "has_pokedex_nballs.state",
+      "sha256": "0ff708b3dcdfa6c1f5fc07687b1641247017b1eb8a9a8b7c6eb0dd988431bd7e",
+      "baseline": "has_pokedex_nballs"
+    }
+  ]
+}
