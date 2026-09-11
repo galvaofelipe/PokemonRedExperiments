@@ -14,6 +14,8 @@ from pyboy.utils import WindowEvent
 
 from frozen.env.global_map import local_to_global, GLOBAL_MAP_SHAPE
 from frozen.ram_map import (
+    SNAPSHOT_BASE,
+    SNAPSHOT_END_INCLUSIVE,
     W_CUR_MAP,
     W_EVENT_FLAGS_END_EXCLUSIVE_V2,
     W_EVENT_FLAGS_END_INCLUSIVE,
@@ -29,6 +31,7 @@ from frozen.ram_map import (
     W_Y_COORD,
     EVENT_FLAG_BITS_OBS,
 )
+from frozen.telemetry import TelemetryRecorder
 
 
 class RedGymEnv(Env):
@@ -129,6 +132,8 @@ class RedGymEnv(Env):
         if not config["headless"]:
             self.pyboy.set_emulation_speed(6)
 
+        self.telemetry = TelemetryRecorder(self.s_path, self.instance_id)
+
     def reset(self, seed=None, options={}):
         self.seed = seed
         with open(self.init_state, "rb") as f:
@@ -152,6 +157,7 @@ class RedGymEnv(Env):
         self.max_map_progress = 0
         self.reward.reset(self)
         self.reset_count += 1
+        self.telemetry.on_reset(self.reset_count)
         return self._get_obs(), {}
 
     def init_map_mem(self):
@@ -193,6 +199,11 @@ class RedGymEnv(Env):
 
         self.run_action_on_emulator(action)
         self.append_agent_stats(action)
+        if self.telemetry.enabled:
+            snapshot = bytes(
+                self.pyboy.memory[SNAPSHOT_BASE : SNAPSHOT_END_INCLUSIVE + 1]
+            )
+            self.telemetry.record_step(self.step_count, action, snapshot)
 
         self.update_recent_actions(action)
 
@@ -229,6 +240,9 @@ class RedGymEnv(Env):
                             print(f"could not find key: {key}")
 
         self.step_count += 1
+
+        if step_limit_reached:
+            self.telemetry.on_episode_done()
 
         return obs, new_reward, False, step_limit_reached, {}
 
@@ -465,6 +479,8 @@ class RedGymEnv(Env):
         return -1
 
     def close(self):
+        if getattr(self, "telemetry", None) is not None:
+            self.telemetry.close()
         if getattr(self, "pyboy", None) is not None:
             self.pyboy.stop(False)
             self.pyboy = None

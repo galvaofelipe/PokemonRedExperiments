@@ -201,6 +201,7 @@ def make_env(rank, env_conf, seed=0, stream=True, stream_user="v3-default"):
     def _init():
         conf = {
             **env_conf,
+            "instance_id": str(rank),
             "reward": DefaultReward(
                 reward_scale=env_conf["reward_scale"],
                 explore_weight=env_conf["explore_weight"],
