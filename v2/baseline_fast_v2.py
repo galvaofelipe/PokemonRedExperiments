@@ -1,5 +1,9 @@
 import argparse
+import json
+import shutil
+import socket
 import sys
+from datetime import datetime
 from os.path import exists
 from pathlib import Path
 
@@ -56,6 +60,11 @@ def parse_args():
     p.add_argument("--debug", action=argparse.BooleanOptionalAction, default=False)
     p.add_argument("--reward-scale", type=float, default=0.5)
     p.add_argument("--explore-weight", type=float, default=0.25)
+    p.add_argument(
+        "--backup",
+        default="",
+        help="After learn(), copy checkpoints/summaries to baselines/NAME. Empty skips.",
+    )
     return p.parse_args()
 
 
@@ -69,7 +78,64 @@ def latest_checkpoint(sess_path: Path) -> str:
 def stdin_checkpoint() -> str:
     if sys.stdin.isatty():
         return ""
-    return sys.stdin.read().strip()
+    data = sys.stdin.read().strip()
+    if not data:
+        return ""
+    first = data.splitlines()[0].strip()
+    # Queue leftover paths are .json job files, not PPO checkpoints.
+    if first.endswith(".json"):
+        return ""
+    return first
+
+
+def _skip_backup_file(path: Path) -> bool:
+    name = path.name
+    if "tfevents" in name:
+        return True
+    if path.suffix.lower() in {".mp4", ".webm", ".avi", ".mov"}:
+        return True
+    return False
+
+
+def backup_run(name, sess_path, args, start_ts, end_ts, model, completed):
+    dest = Path("baselines") / name
+    dest.mkdir(parents=True, exist_ok=True)
+
+    for zipf in sess_path.glob("poke_*_steps.zip"):
+        shutil.copy2(zipf, dest / zipf.name)
+
+    for state in sess_path.rglob("*.state"):
+        if not _skip_backup_file(state):
+            shutil.copy2(state, dest / state.name)
+
+    for extra in (
+        sess_path / "resource_summary.txt",
+        sess_path / "resource_log.csv",
+    ):
+        if extra.exists():
+            shutil.copy2(extra, dest / extra.name)
+
+    for path in sess_path.rglob("*"):
+        if not path.is_file() or _skip_backup_file(path):
+            continue
+        low = path.name.lower()
+        if "summary" in low or (low.endswith(".json") and path.name != "run.json"):
+            target = dest / path.name
+            if not target.exists():
+                shutil.copy2(path, target)
+
+    timesteps = int(getattr(model, "num_timesteps", 0) or 0) if model is not None else None
+    meta = {
+        "cli_args": {k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items()},
+        "seed": args.seed,
+        "start": start_ts,
+        "end": end_ts,
+        "num_timesteps": timesteps,
+        "hostname": socket.gethostname(),
+        "completed": bool(completed),
+    }
+    (dest / "run.json").write_text(json.dumps(meta, indent=2) + "\n")
+    print(f"backup written to {dest.resolve()}")
 
 
 def make_env(rank, env_conf, seed=0, stream=True, stream_user="v2-default"):
@@ -190,11 +256,18 @@ if __name__ == "__main__":
         )
 
     print(model.policy)
-    model.learn(
-        total_timesteps=total_timesteps,
-        callback=CallbackList(callbacks),
-        tb_log_name="poke_ppo",
-    )
-
-    if args.use_wandb:
-        run.finish()
+    completed = False
+    start_ts = datetime.now().astimezone().isoformat()
+    try:
+        model.learn(
+            total_timesteps=total_timesteps,
+            callback=CallbackList(callbacks),
+            tb_log_name="poke_ppo",
+        )
+        completed = True
+    finally:
+        end_ts = datetime.now().astimezone().isoformat()
+        if args.use_wandb:
+            run.finish()
+        if args.backup:
+            backup_run(args.backup, sess_path, args, start_ts, end_ts, model, completed)

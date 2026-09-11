@@ -1,0 +1,12 @@
+{
+  "name": "b35m",
+  "args": [
+    "--num-envs", "8",
+    "--sps", "720",
+    "--no-stream",
+    "--save-final-state",
+    "--total-timesteps", "35000000",
+    "--session-path", "runs_b35m",
+    "--backup", "baseline_35m"
+  ]
+}

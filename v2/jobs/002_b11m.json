@@ -1,0 +1,12 @@
+{
+  "name": "b11m",
+  "args": [
+    "--num-envs", "8",
+    "--sps", "720",
+    "--no-stream",
+    "--save-final-state",
+    "--total-timesteps", "11000000",
+    "--session-path", "runs_b11m",
+    "--backup", "baseline_11m"
+  ]
+}

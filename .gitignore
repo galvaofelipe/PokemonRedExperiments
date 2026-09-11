@@ -19,3 +19,15 @@ PokemonRed.gb.state
 venv*
 .venv
 .python-version
+v2/logs/
+v2/baselines/
+v2/archive/
+v2/jobs/done/
+v2/jobs/failed/
+v2/jobs/*.status
+v2/jobs/.queue.lock
+docs/
+.scratch/
+AGENTS.md
+CONTEXT.md
+.kimi-code/
