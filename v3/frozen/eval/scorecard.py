@@ -6,7 +6,7 @@ from pathlib import Path
 from frozen.eval.maps import maps_seen_names
 from frozen.scorer import SCORE_VERSION
 
-SCORECARD_VERSION = "1.0.0"
+SCORECARD_VERSION = "1.1.0"
 
 COMPONENT_KEYS = (
     "badges",
@@ -31,6 +31,7 @@ def build_scorecard(
     checkpoint_sha256: str,
     init_states: list[dict],
     episodes: list[dict],
+    episode_splits=None,
 ) -> dict:
     if not episodes:
         raise ValueError("scorecard requires at least one episode")
@@ -47,20 +48,21 @@ def build_scorecard(
         union_map_ids.update(ep["_map_ids"])
 
     public_episodes = []
-    for ep in episodes:
-        public_episodes.append(
-            {
-                "state": ep["state"],
-                "seed": ep["seed"],
-                "steps": ep["steps"],
-                "score": ep["score"],
-                "components": dict(ep["components"]),
-                "maps_seen_names": ep["maps_seen_names"],
-                "telemetry_file": ep["telemetry_file"],
-            }
-        )
+    for idx, ep in enumerate(episodes):
+        entry = {
+            "state": ep["state"],
+            "seed": ep["seed"],
+            "steps": ep["steps"],
+            "score": ep["score"],
+            "components": dict(ep["components"]),
+            "maps_seen_names": ep["maps_seen_names"],
+            "telemetry_file": ep["telemetry_file"],
+        }
+        if episode_splits is not None:
+            entry["splits"] = {"achieved": list(episode_splits[idx][1])}
+        public_episodes.append(entry)
 
-    return {
+    result = {
         "scorecard_version": SCORECARD_VERSION,
         "score_version": SCORE_VERSION,
         "eval_suite_version": eval_suite_version,
@@ -78,6 +80,11 @@ def build_scorecard(
         "maps_seen_names": maps_seen_names(union_map_ids),
         "episodes": public_episodes,
     }
+    if episode_splits is not None:
+        from frozen.splits import aggregate_splits_section
+
+        result["splits"] = aggregate_splits_section(episode_splits)
+    return result
 
 
 def write_scorecard(path: Path, data: dict) -> None:

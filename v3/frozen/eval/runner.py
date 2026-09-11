@@ -12,6 +12,7 @@ from frozen.eval.seeds import derive_seed
 from frozen.eval.suite import EvalState, EvalSuite, load_eval_suite
 from frozen.ram_map import NUM_MAPS
 from frozen.scorer import load_baseline, score_snapshots
+from frozen.splits import episode_id_from_telemetry, extract_splits_from_telemetry
 from frozen.telemetry import episode_path, iter_episode_records
 
 
@@ -97,6 +98,7 @@ def run_episode(
 
     tel_path = episode_path(session_path, instance_id, reset_count=1)
     result, steps, map_ids = score_episode_telemetry(tel_path, baseline)
+    splits_achieved = extract_splits_from_telemetry(tel_path)
 
     return {
         "state": state.name,
@@ -107,6 +109,8 @@ def run_episode(
         "maps_seen_names": maps_seen_names(map_ids),
         "telemetry_file": tel_path.name,
         "_map_ids": map_ids,
+        "_episode_id": episode_id_from_telemetry(tel_path),
+        "_splits_achieved": splits_achieved,
     }
 
 
@@ -166,12 +170,16 @@ def run_eval(
     init_states = [
         {"name": s.name, "file": s.file, "sha256": s.sha256} for s in states
     ]
+    episode_splits = [
+        (ep["_episode_id"], ep["_splits_achieved"]) for ep in episodes
+    ]
     scorecard = build_scorecard(
         eval_suite_version=suite.eval_suite_version,
         checkpoint_path=checkpoint_path,
         checkpoint_sha256=_sha256_file(checkpoint_path),
         init_states=init_states,
         episodes=episodes,
+        episode_splits=episode_splits,
     )
     write_scorecard(session_path / "scorecard.json", scorecard)
     return scorecard
