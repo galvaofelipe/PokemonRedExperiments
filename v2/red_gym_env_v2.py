@@ -179,6 +179,7 @@ class RedGymEnv(Env):
 
     def init_map_mem(self):
         self.seen_coords = {}
+        self.seen_maps = set()
 
     def render(self, reduce_res=True):
         game_pixels_render = self.pyboy.screen.ndarray[:,:,0:1]  # (144, 160, 3)
@@ -217,6 +218,7 @@ class RedGymEnv(Env):
             self.start_video()
 
         self.run_action_on_emulator(action)
+        self.update_map_progress()
         self.append_agent_stats(action)
 
         self.update_recent_actions(action)
@@ -234,8 +236,6 @@ class RedGymEnv(Env):
         self.last_health = self.read_hp_fraction()
         if self.last_health > 0:
             self.party_was_alive = True
-
-        self.update_map_progress()
 
         step_limit_reached = self.step_count >= self.max_steps - 1
         wipe_reached = (
@@ -314,6 +314,8 @@ class RedGymEnv(Env):
                 "ptypes": self.read_party(),
                 "hp": self.read_hp_fraction(),
                 "coord_count": len(self.seen_coords),
+                "unique_maps": len(self.seen_maps),
+                "dex_seen": self.read_dex_seen(),
                 "deaths": self.died_count,
                 "badge": self.get_badges(),
                 "event": self.progress_reward["event"],
@@ -619,7 +621,18 @@ class RedGymEnv(Env):
     
     def update_map_progress(self):
         map_idx = self.read_m(0xD35E)
+        if map_idx < 248:
+            self.seen_maps.add(map_idx)
         self.max_map_progress = max(self.max_map_progress, self.get_map_progress(map_idx))
+
+    def read_dex_seen(self):
+        total = 0
+        for addr in range(0xD30A, 0xD31D):
+            byte = self.read_m(addr)
+            if addr == 0xD31C:
+                byte &= 0x7F
+            total += self.bit_count(byte)
+        return total
     
     def get_map_progress(self, map_idx):
         if map_idx in self.essential_map_locations.keys():
