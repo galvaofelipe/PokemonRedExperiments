@@ -40,4 +40,5 @@ v3/ledger.tsv
 v3/milestones.jsonl
 v3/champion.json
 v3/champion/
+v2/.tb_logs/
 INBOX.md

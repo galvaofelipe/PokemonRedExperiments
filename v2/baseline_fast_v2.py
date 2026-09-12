@@ -40,7 +40,22 @@ def parse_args():
         help="Assumed total env-steps/sec for --minutes. Default: num_envs * 90.",
     )
     p.add_argument("--total-timesteps", type=int, default=None, help="Exact SB3 timestep budget. Overrides --minutes.")
-    p.add_argument("--max-steps", type=int, default=2048 * 80, help="Episode length / env max_steps.")
+    p.add_argument(
+        "--max-steps",
+        type=int,
+        default=2048 * 80,
+        help=(
+            "Episode length / env max_steps. At default action_freq=24, "
+            "steps × action_freq frames/step ÷ ~59.727 fps ≈ in-game hours "
+            "(163840 steps ≈ 18.3 game-hours)."
+        ),
+    )
+    p.add_argument(
+        "--n-steps",
+        type=int,
+        default=None,
+        help="PPO rollout horizon per env (SB3 n_steps). Default: max_steps // 64.",
+    )
     p.add_argument("--save-freq", type=int, default=None, help="Vec-env steps between checkpoints. Default: max_steps/2.")
     p.add_argument("--checkpoint", default="", help="PPO zip to resume, without the .zip suffix.")
     p.add_argument("--resume", action="store_true", help="Resume the newest poke_*.zip in --session-path.")
@@ -51,6 +66,15 @@ def parse_args():
     p.add_argument("--headless", action=argparse.BooleanOptionalAction, default=True)
     p.add_argument("--save-final-state", action=argparse.BooleanOptionalAction, default=False)
     p.add_argument("--early-stop", action=argparse.BooleanOptionalAction, default=False)
+    p.add_argument(
+        "--early-stop-survival",
+        type=float,
+        default=0.05,
+        help=(
+            "With --early-stop: per-episode probability that a wipe does not end "
+            "the episode (agent continues after blackout). Ignored when early-stop is off."
+        ),
+    )
     p.add_argument("--action-freq", type=int, default=24)
     p.add_argument("--init-state", default="../init.state")
     p.add_argument("--print-rewards", action=argparse.BooleanOptionalAction, default=True)
@@ -167,6 +191,7 @@ if __name__ == "__main__":
         "headless": args.headless,
         "save_final_state": args.save_final_state,
         "early_stop": args.early_stop,
+        "early_stop_survival": args.early_stop_survival,
         "action_freq": args.action_freq,
         "init_state": args.init_state,
         "max_steps": args.max_steps,
@@ -188,12 +213,14 @@ if __name__ == "__main__":
     else:
         total_timesteps = args.max_steps * args.num_envs * 10000
 
+    n_steps = args.n_steps if args.n_steps is not None else args.max_steps // 64
+
     save_freq = args.save_freq if args.save_freq is not None else args.max_steps // 2
     file_name = args.checkpoint or (latest_checkpoint(sess_path) if args.resume else stdin_checkpoint())
 
     print(env_config)
     print(
-        f"num_envs={args.num_envs} total_timesteps={total_timesteps} "
+        f"num_envs={args.num_envs} n_steps={n_steps} total_timesteps={total_timesteps} "
         f"save_freq={save_freq} assumed_sps={sps:.0f} "
         f"est_hours={total_timesteps / sps / 3600:.1f} stream={args.stream} "
         f"checkpoint={file_name or '(none)'}"
@@ -230,14 +257,12 @@ if __name__ == "__main__":
         )
         callbacks.append(WandbCallback())
 
-    train_steps_batch = args.max_steps // 64
-
     if file_name and exists(file_name + ".zip"):
         print("\nloading checkpoint")
         model = PPO.load(file_name, env=env)
-        model.n_steps = train_steps_batch
+        model.n_steps = n_steps
         model.n_envs = args.num_envs
-        model.rollout_buffer.buffer_size = train_steps_batch
+        model.rollout_buffer.buffer_size = n_steps
         model.rollout_buffer.n_envs = args.num_envs
         model.rollout_buffer.reset()
     else:
@@ -247,7 +272,7 @@ if __name__ == "__main__":
             "MultiInputPolicy",
             env,
             verbose=1,
-            n_steps=train_steps_batch,
+            n_steps=n_steps,
             batch_size=512,
             n_epochs=1,
             gamma=0.997,

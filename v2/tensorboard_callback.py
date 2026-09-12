@@ -50,7 +50,40 @@ class TensorboardCallback(BaseCallback):
             for key, distrib in distributions.items():
                 self.writer.add_histogram(f"env_stats_distribs/{key}", distrib, self.n_calls)
                 self.logger.record(f"env_stats_max/{key}", max(distrib))
-                
+
+        dones = self.locals.get("dones")
+        if dones is not None and np.any(dones):
+            # writer.add_scalar, not logger.record: logger overwrites same-key
+            # values between rollout dumps, dropping episodes when more than
+            # one ends inside a single rollout. Triggered by the vec dones so
+            # every env's episode end is logged exactly once, on the step it
+            # happens (last_episode_info survives the vec autoreset).
+            all_ep_infos = self.training_env.get_attr("last_episode_info")
+            for env_idx, done in enumerate(dones):
+                if not done:
+                    continue
+                episode_info = all_ep_infos[env_idx]
+                if not episode_info:
+                    continue
+                self.writer.add_scalar("episode/length", episode_info["episode_length"], self.num_timesteps)
+                self.writer.add_scalar(
+                    "episode/survival",
+                    1.0 if episode_info["episode_survival"] else 0.0,
+                    self.num_timesteps,
+                )
+                self.writer.add_scalar(
+                    "episode/end_wipe",
+                    1.0 if episode_info["end_reason"] == "wipe" else 0.0,
+                    self.num_timesteps,
+                )
+                self.writer.add_scalar(
+                    "episode/end_max_steps",
+                    1.0 if episode_info["end_reason"] == "max_steps" else 0.0,
+                    self.num_timesteps,
+                )
+
+        if self.training_env.env_method("check_if_done", indices=[0])[0]:
+
             #images = self.training_env.get_attr("recent_screens")
             #images_row = rearrange(np.array(images), "(r f) h w c -> (r c h) (f w)", r=2)
             #self.logger.record("trajectory/image", Image(images_row, "HW"), exclude=("stdout", "log", "json", "csv"))

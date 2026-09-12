@@ -37,6 +37,11 @@ class RedGymEnv(Env):
         self.reward_scale = (
             1 if "reward_scale" not in config else config["reward_scale"]
         )
+        self.early_stop = config.get("early_stop", False)
+        self.early_stop_survival = config.get("early_stop_survival", 0.05)
+        self.episode_survives_wipe = False
+        self.party_was_alive = False
+        self.last_episode_info = {}
         self.instance_id = (
             str(uuid.uuid4())[:8]
             if "instance_id" not in config
@@ -121,6 +126,7 @@ class RedGymEnv(Env):
             self.pyboy.set_emulation_speed(6)
 
     def reset(self, seed=None, options={}):
+        super().reset(seed=seed)
         self.seed = seed
         # restart game, skipping credits
         with open(self.init_state, "rb") as f:
@@ -147,6 +153,13 @@ class RedGymEnv(Env):
         self.died_count = 0
         self.party_size = 0
         self.step_count = 0
+        self.party_was_alive = False
+        if self.early_stop:
+            self.episode_survives_wipe = (
+                self.np_random.random() < self.early_stop_survival
+            )
+        else:
+            self.episode_survives_wipe = False
 
         self.base_event_flags = sum([
                 self.bit_count(self.read_m(i))
@@ -219,10 +232,20 @@ class RedGymEnv(Env):
         new_reward = self.update_reward()
 
         self.last_health = self.read_hp_fraction()
+        if self.last_health > 0:
+            self.party_was_alive = True
 
         self.update_map_progress()
 
-        step_limit_reached = self.check_if_done()
+        step_limit_reached = self.step_count >= self.max_steps - 1
+        wipe_reached = (
+            self.early_stop
+            and not self.episode_survives_wipe
+            and self.party_was_alive
+            and self.last_health == 0
+        )
+        terminated = wipe_reached
+        truncated = step_limit_reached
 
         obs = self._get_obs()
 
@@ -244,7 +267,20 @@ class RedGymEnv(Env):
 
         self.step_count += 1
 
-        return obs, new_reward, False, step_limit_reached, {}
+        if terminated or truncated:
+            end_reason = "wipe" if terminated else "max_steps"
+            if terminated:
+                # episode ends at the faint, before the blackout heal that
+                # update_heal_reward counts; count the wipe here instead
+                self.died_count += 1
+                self.agent_stats[-1]["deaths"] = self.died_count
+            self.last_episode_info = {
+                "end_reason": end_reason,
+                "episode_survival": self.episode_survives_wipe,
+                "episode_length": self.step_count,
+            }
+
+        return obs, new_reward, terminated, truncated, {}
     
     def run_action_on_emulator(self, action):
         # press button then release after some steps
@@ -406,9 +442,14 @@ class RedGymEnv(Env):
         )
 
     def check_if_done(self):
-        done = self.step_count >= self.max_steps - 1
-        # done = self.read_hp_fraction() == 0 # end game on loss
-        return done
+        step_limit = self.step_count >= self.max_steps - 1
+        wipe = (
+            self.early_stop
+            and not self.episode_survives_wipe
+            and self.party_was_alive
+            and self.read_hp_fraction() == 0
+        )
+        return step_limit or wipe
 
     def save_and_print_info(self, done, obs):
         if self.print_rewards:
