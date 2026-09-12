@@ -36,4 +36,8 @@ v3/jobs/done/
 v3/jobs/failed/
 v3/jobs/running/
 v3/jobs/.runner.lock
+v3/ledger.tsv
+v3/milestones.jsonl
+v3/champion.json
+v3/champion/
 INBOX.md

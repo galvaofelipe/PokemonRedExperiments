@@ -1,0 +1,30 @@
+{
+  "scorecard_version": "1.1.0",
+  "score_version": "1.0.0",
+  "eval_suite_version": "1.0.0",
+  "commit": "abc123",
+  "score": {"mean": 10.0, "max": 10.0},
+  "components_mean": {
+    "badges": 1.0,
+    "events": 5.0,
+    "dex_caught": 1.0,
+    "dex_seen": 2.0,
+    "unique_maps": 3.0,
+    "level_sum_capped": 4.0
+  },
+  "init_states": [{"name": "fresh_game", "file": "fast_text_start.state", "sha256": "deadbeef"}],
+  "splits": {
+    "achieved": [
+      {
+        "name": "Brock",
+        "first_hit_step": 1234,
+        "game_time": "0:05:30",
+        "game_time_frames": 33000,
+        "clock_maxed": false,
+        "segment_time": "0:05:30",
+        "segment_time_frames": 33000,
+        "initial": false
+      }
+    ]
+  }
+}

@@ -11,6 +11,7 @@ Job JSON schema (required):
 
 Optional fields:
   max_steps — train episode cap (train.py default if omitted)
+  tag, description — recorded verbatim in the Ledger (default "")
   eval.max_steps, eval.state_filter, eval.seed_filter, eval.suite_path
     — forwarded to frozen.eval; absent keys use frozen suite defaults.
 
@@ -37,6 +38,7 @@ from pathlib import Path
 from typing import Any
 
 from frozen_manifest import verify as verify_frozen_manifest
+import ratchet
 
 # Keep in sync with v3/train.py
 SPS_PER_ENV = 90
@@ -74,6 +76,8 @@ class Job:
     warm_start_from: str | None
     max_steps: int | None
     eval: EvalConfig
+    tag: str
+    description: str
     raw: dict[str, Any] = field(repr=False)
 
 
@@ -89,6 +93,10 @@ class RunnerConfig:
     status_refresh_seconds: float
     train_log: str
     eval_log: str
+    ledger_path: str
+    milestones_path: str
+    champion_json: str
+    champion_dir: str
 
 
 @dataclass
@@ -100,6 +108,7 @@ class RunContext:
     planned_timesteps: int
     commit: str
     hostname: str
+    train_ended_at: datetime | None = None
 
 
 _lock_path: Path | None = None
@@ -120,6 +129,10 @@ def load_config(config_path: Path | None = None, v3_root: Path = V3_ROOT) -> Run
         status_refresh_seconds=float(data["status_refresh_seconds"]),
         train_log=str(data["train_log"]),
         eval_log=str(data["eval_log"]),
+        ledger_path=str(data["ledger_path"]),
+        milestones_path=str(data["milestones_path"]),
+        champion_json=str(data["champion_json"]),
+        champion_dir=str(data["champion_dir"]),
     )
 
 
@@ -209,6 +222,14 @@ def validate_job(data: dict[str, Any], config: RunnerConfig) -> Job:
         suite_path=suite_path,
     )
 
+    tag = data.get("tag", "")
+    if tag is None or not isinstance(tag, str):
+        raise JobValidationError("tag must be a string")
+
+    description = data.get("description", "")
+    if description is None or not isinstance(description, str):
+        raise JobValidationError("description must be a string")
+
     return Job(
         name=name,
         run_type=run_type,
@@ -219,6 +240,8 @@ def validate_job(data: dict[str, Any], config: RunnerConfig) -> Job:
         warm_start_from=warm_start,
         max_steps=max_steps,
         eval=eval_cfg,
+        tag=tag,
+        description=description,
         raw=data,
     )
 
@@ -516,6 +539,7 @@ def fail_job(
     ctx: RunContext | None = None,
     train_exit_code: int | None = None,
     eval_exit_code: int | None = None,
+    repo_root: Path = REPO_ROOT,
 ) -> None:
     config.failed_dir.mkdir(parents=True, exist_ok=True)
     reason_path = config.failed_dir / f"{claimed_path.stem}.reason.txt"
@@ -536,9 +560,25 @@ def fail_job(
     dest = config.failed_dir / claimed_path.name
     if claimed_path.exists():
         os.rename(claimed_path, dest)
+    if ctx is not None:
+        ratchet.finalize_job(
+            config,
+            ctx,
+            repo_root=repo_root,
+            outcome="crash",
+            train_ended_at=ctx.train_ended_at,
+            v3_root=V3_ROOT,
+        )
 
 
-def complete_job(config: RunnerConfig, ctx: RunContext, claimed_path: Path, train_rc: int, eval_rc: int | None) -> None:
+def complete_job(
+    config: RunnerConfig,
+    ctx: RunContext,
+    claimed_path: Path,
+    train_rc: int,
+    eval_rc: int | None,
+    repo_root: Path = REPO_ROOT,
+) -> None:
     ckpt = latest_checkpoint_path(ctx.run_dir)
     write_run_metadata(
         ctx,
@@ -554,6 +594,14 @@ def complete_job(config: RunnerConfig, ctx: RunContext, claimed_path: Path, trai
         status_file.unlink(missing_ok=True)
     config.done_dir.mkdir(parents=True, exist_ok=True)
     os.rename(claimed_path, config.done_dir / claimed_path.name)
+    ratchet.finalize_job(
+        config,
+        ctx,
+        repo_root=repo_root,
+        outcome="success",
+        train_ended_at=ctx.train_ended_at,
+        v3_root=V3_ROOT,
+    )
 
 
 def run_train(
@@ -656,6 +704,7 @@ def process_job(
 
     train_proc = run_train(config, ctx, python=python)
     train_rc = wait_with_status_refresh(config, ctx, train_proc, "training")
+    ctx.train_ended_at = datetime.now(timezone.utc)
     if train_rc != 0:
         fail_job(
             config,
@@ -663,6 +712,7 @@ def process_job(
             f"train exited with code {train_rc}",
             ctx=ctx,
             train_exit_code=train_rc,
+            repo_root=repo_root,
         )
         return
 
@@ -677,6 +727,7 @@ def process_job(
                 "no checkpoint for eval",
                 ctx=ctx,
                 train_exit_code=train_rc,
+                repo_root=repo_root,
             )
             return
         eval_proc = run_eval(config, ctx, ckpt, python=python)
@@ -689,10 +740,11 @@ def process_job(
                 ctx=ctx,
                 train_exit_code=train_rc,
                 eval_exit_code=eval_rc,
+                repo_root=repo_root,
             )
             return
 
-    complete_job(config, ctx, claimed_path, train_rc, eval_rc)
+    complete_job(config, ctx, claimed_path, train_rc, eval_rc, repo_root=repo_root)
 
 
 def drain_queue(

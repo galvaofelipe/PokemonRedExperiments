@@ -25,6 +25,8 @@ def _minimal_config(tmp: Path) -> runner.RunnerConfig:
     jobs = tmp / "jobs"
     for sub in ("queued", "running", "done", "failed"):
         (jobs / sub).mkdir(parents=True)
+    ratchet_scratch = tmp / "ratchet"
+    ratchet_scratch.mkdir()
     return runner.RunnerConfig(
         queued_dir=jobs / "queued",
         running_dir=jobs / "running",
@@ -36,7 +38,41 @@ def _minimal_config(tmp: Path) -> runner.RunnerConfig:
         status_refresh_seconds=0.01,
         train_log="train.log",
         eval_log="eval.log",
+        ledger_path=str(ratchet_scratch / "ledger.tsv"),
+        milestones_path=str(ratchet_scratch / "milestones.jsonl"),
+        champion_json=str(ratchet_scratch / "champion.json"),
+        champion_dir=str(ratchet_scratch / "champion"),
     )
+
+
+def _sample_scorecard() -> dict:
+    return {
+        "scorecard_version": "1.1.0",
+        "score_version": "1.0.0",
+        "eval_suite_version": "1.0.0",
+        "commit": "abc123",
+        "score": {"mean": 1.0, "max": 1.0},
+        "components_mean": {
+            "badges": 0.0,
+            "events": 0.0,
+            "dex_caught": 0.0,
+            "dex_seen": 0.0,
+            "unique_maps": 1.0,
+            "level_sum_capped": 0.0,
+        },
+        "init_states": [{"name": "fresh_game", "file": "x.state", "sha256": "abc"}],
+        "splits": {"achieved": []},
+    }
+
+
+def _ledger_rows(cfg: runner.RunnerConfig) -> list[dict]:
+    import csv
+
+    path = Path(cfg.ledger_path)
+    if not path.is_file():
+        return []
+    with path.open(newline="") as f:
+        return list(csv.DictReader(f, delimiter="\t"))
 
 
 def _valid_job(**overrides):
@@ -77,6 +113,16 @@ def test_validate_job_budget_xor():
             _valid_job(budget={"total_timesteps": 100, "minutes": 1}),
             cfg,
         )
+
+
+def test_validate_job_tag_description():
+    cfg = _minimal_config(Path(tempfile.mkdtemp()))
+    job = runner.validate_job(_valid_job(tag="exp-a", description="try entropy"), cfg)
+    assert job.tag == "exp-a"
+    assert job.description == "try entropy"
+    job2 = runner.validate_job(_valid_job(), cfg)
+    assert job2.tag == ""
+    assert job2.description == ""
 
 
 def test_probe_defaults_eval_disabled():
@@ -223,7 +269,7 @@ def test_status_transition_done(mock_run_eval, mock_run_train, _git, _dirty, _ma
         return train_proc
 
     def fake_eval(config, ctx, checkpoint, python=None):
-        (ctx.run_dir / "scorecard.json").write_text("{}")
+        (ctx.run_dir / "scorecard.json").write_text(json.dumps(_sample_scorecard()))
         (ctx.run_dir / "eval.log").write_text("eval ok\n")
         return eval_proc
 
@@ -239,6 +285,10 @@ def test_status_transition_done(mock_run_eval, mock_run_train, _git, _dirty, _ma
     meta = json.loads(meta_files[0].read_text())
     assert meta["status"] == "done"
     assert meta["commit"] == "abc123"
+    rows = _ledger_rows(cfg)
+    assert len(rows) == 1
+    assert rows[0]["commit"] == "abc123"
+    assert rows[0]["status"] == "keep"
 
 
 @patch.object(runner, "verify_frozen_manifest", return_value=_manifest_ok())
@@ -260,6 +310,9 @@ def test_train_crash_goes_failed(mock_run_train, _git, _dirty, _manifest, tmp_pa
 
     assert list(cfg.failed_dir.glob("*.json"))
     assert (cfg.failed_dir / "host-crash.reason.txt").exists()
+    rows = _ledger_rows(cfg)
+    assert len(rows) == 1
+    assert rows[0]["status"] == "crash"
 
 
 @patch.object(runner, "verify_frozen_manifest", return_value=_manifest_ok())
@@ -282,6 +335,9 @@ def test_eval_skipped_for_probe(mock_run_eval, mock_run_train, _git, _dirty, _ma
 
     mock_run_eval.assert_not_called()
     assert list(cfg.done_dir.glob("*.json"))
+    rows = _ledger_rows(cfg)
+    assert len(rows) == 1
+    assert rows[0]["status"] == "no-eval"
 
 
 @patch.object(runner, "verify_frozen_manifest", return_value=_manifest_ok())
@@ -337,6 +393,25 @@ def test_invalid_job_goes_failed(tmp_path):
 
     assert list(cfg.failed_dir.glob("*.json"))
     assert (cfg.failed_dir / "host-bad.reason.txt").exists()
+    assert _ledger_rows(cfg) == []
+
+
+@patch.object(runner, "verify_frozen_manifest", return_value=_manifest_ok())
+@patch.object(runner, "dirty_tracked_paths", return_value=[])
+def test_pre_run_failure_no_ledger(_dirty, _manifest, tmp_path):
+    cfg = _minimal_config(tmp_path)
+    job_data = _valid_job(budget={"total_timesteps": 100}, eval={"enabled": False})
+    claimed = cfg.running_dir / "host-manifest.json"
+    claimed.write_text(json.dumps(job_data))
+
+    bad = frozen_manifest.VerifyResult(
+        ok=False,
+        hash_mismatches=["v3/frozen/ram_map.py"],
+    )
+    with patch.object(runner, "verify_frozen_manifest", return_value=bad):
+        runner.process_job(cfg, claimed)
+
+    assert _ledger_rows(cfg) == []
 
 
 def test_build_status_eta(tmp_path):

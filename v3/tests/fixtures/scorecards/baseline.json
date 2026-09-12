@@ -1,0 +1,17 @@
+{
+  "scorecard_version": "1.1.0",
+  "score_version": "1.0.0",
+  "eval_suite_version": "1.0.0",
+  "commit": "abc123",
+  "score": {"mean": 10.0, "max": 11.0},
+  "components_mean": {
+    "badges": 0.0,
+    "events": 5.0,
+    "dex_caught": 1.0,
+    "dex_seen": 2.0,
+    "unique_maps": 3.0,
+    "level_sum_capped": 4.0
+  },
+  "init_states": [{"name": "fresh_game", "file": "fast_text_start.state", "sha256": "deadbeef"}],
+  "splits": {"achieved": []}
+}

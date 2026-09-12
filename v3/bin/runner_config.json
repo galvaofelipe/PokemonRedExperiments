@@ -10,5 +10,9 @@
   "default_num_envs": 6,
   "status_refresh_seconds": 15,
   "train_log": "train.log",
-  "eval_log": "eval.log"
+  "eval_log": "eval.log",
+  "ledger_path": "ledger.tsv",
+  "milestones_path": "milestones.jsonl",
+  "champion_json": "champion.json",
+  "champion_dir": "champion"
 }
