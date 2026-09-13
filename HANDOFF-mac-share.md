@@ -10,7 +10,10 @@ Read together with `$POKERED_DATA/pokered/README.md` (share layout source of tru
 POKERED_DATA=$(scripts/ensure_tower.sh)   # idempotent; prints the mount point
 ```
 
-- Prints `~/mnt/tower` on stdout; diagnostics on stderr. Already-mounted → prints and exits.
+- Prints the share root `~/mnt/tower/data` on stdout; diagnostics on stderr.
+  Already-mounted → prints and exits. The `data` share mounts at
+  `$TOWER_MNT/$TOWER_SHARE` on both OSes, so sibling shares (`appdata`, `media`)
+  can live side by side under `~/mnt/tower/`.
 - Host selection: probes LAN `192.168.0.9:445`, falls back to `tower.ide-pogona.ts.net`.
   On Linux the mount itself is time-bounded and also falls back after a failed attempt —
   a bare 445 listener is NOT proof of a working SMB server (seen in the wild: LAN host

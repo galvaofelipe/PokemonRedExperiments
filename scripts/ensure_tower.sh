@@ -14,7 +14,8 @@
 #                mount of a probed host also falls back to the tailnet name.
 #   TOWER_SHARE  share name (default: data)
 #   TOWER_USER   smb user (default: galvaofelipe)
-#   TOWER_MNT    mount point (default: ~/mnt/tower)
+#   TOWER_MNT    mount base (default: ~/mnt/tower); the share mounts at
+#                $TOWER_MNT/$TOWER_SHARE, i.e. ~/mnt/tower/data by default
 #   SMB_PASS     smb password; if unset the mount tool prompts interactively.
 #                (macOS: special chars in SMB_PASS need URL-encoding.)
 #
@@ -24,14 +25,23 @@ set -euo pipefail
 
 SHARE_USER="${TOWER_USER:-galvaofelipe}"
 SHARE_NAME="${TOWER_SHARE:-data}"
-MNT="${TOWER_MNT:-$HOME/mnt/tower}"
+MNT="${TOWER_MNT:-$HOME/mnt/tower}/$SHARE_NAME"
 
 err() { printf '%s\n' "$*" >&2; }
+
+lan_reachable() {
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    # macOS has no GNU timeout; nc -G bounds the connect attempt.
+    nc -z -G 2 192.168.0.9 445 >/dev/null 2>&1
+  else
+    timeout 2 bash -c ':</dev/tcp/192.168.0.9/445' 2>/dev/null
+  fi
+}
 
 pick_host() {
   if [[ -n "${TOWER_HOST:-}" ]]; then
     printf '%s' "$TOWER_HOST"
-  elif timeout 2 bash -c ':</dev/tcp/192.168.0.9/445' 2>/dev/null; then
+  elif lan_reachable; then
     printf '192.168.0.9'
   else
     printf 'tower.ide-pogona.ts.net'
