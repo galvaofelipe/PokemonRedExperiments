@@ -76,3 +76,10 @@ subir `.wslconfig` pra 26–27 GB (caixa tem 30), dieta do acumulador (ticket 18
 cair pra 40–48 lógicas. 80 lógicas só com a dieta de memmap. Maratona de uma semana
 exige validação steady-state antes; soak térmico deve derrubar o SPS absoluto em
 ~10–20%.
+
+**Validação externa** (system-wide, fora do processo, `scripts/mem_watch.py`): PSS
+externo bate com o in-process (22,79 vs 22,82 GB de pico, 0,2%), mas revelou que
+acc64_p8 **já swapava** no cap de 24 GB — MemAvailable mínimo de 218 MB e swap
+0,4→5,3 GB no pico do train; demanda real da árvore ~27–28 GB (PSS só conta
+residente). Pra 64 streams a mitigação (RAM ou dieta) é **obrigatória**, não
+opcional. Detalhes em `docs/perf/am18.md` § External validation.

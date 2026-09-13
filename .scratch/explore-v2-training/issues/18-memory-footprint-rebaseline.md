@@ -50,3 +50,8 @@ Pra dieta (item 2): `del` do buffer de cada round após o concat **não** resolv
 pico exige todos vivos ao mesmo tempo. As alavancas reais são `np.memmap` das obs,
 mega-update menor (32–48 lógicas), ou mais RAM pro WSL (`.wslconfig`, caixa tem 30 GB).
 Tabela completa: `v2/bench/bench_geometry.csv` + seção Medições do ticket 07.
+
+Medição externa system-wide (`scripts/mem_watch.py`, 2026-09-13) fechou a questão:
+acc64_p8 no cap de 24 GB **swapa 5+ GB** no pico do train (MemAvailable mínimo
+218 MB; demanda real ~27–28 GB — PSS só vê residente). Dieta ou bump de RAM é
+pré-requisito pra 64 streams, não otimização.
