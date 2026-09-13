@@ -56,11 +56,6 @@ def _read_tfrecords(path: Path) -> list[bytes]:
     return records
 
 
-def _is_file_version_record(data: bytes) -> bool:
-    ev = event_pb2.Event.FromString(data)
-    return ev.WhichOneof("what") == "file_version"
-
-
 def _compact_scalar_value(val: summary_pb2.Summary.Value) -> summary_pb2.Summary.Value:
     kind = val.WhichOneof("value")
     if (
@@ -110,7 +105,13 @@ def _write_merged(dest: Path, first_leg: Path, resumed_leg: Path, offset: int) -
     copied = 0
     for path in _event_files(first_leg):
         for record in _read_tfrecords(path):
-            if _is_file_version_record(record):
+            ev = event_pb2.Event.FromString(record)
+            if ev.WhichOneof("what") == "file_version":
+                continue
+            # The first leg may overshoot the resume checkpoint (e.g. SB3 stops
+            # only at an update boundary). Those steps were discarded by the
+            # resume; keeping them would duplicate steps against shifted leg2.
+            if ev.step > offset:
                 continue
             writer.write(record)
             copied += 1
@@ -212,7 +213,7 @@ def _validate_merged(
             dupes = sorted({s for s in steps if steps.count(s) > 1})
             raise RuntimeError(f"duplicate steps for {tag}: {dupes[:5]}")
 
-        want = [(s, v) for s, v in first.get(tag, [])]
+        want = [(s, v) for s, v in first.get(tag, []) if s <= offset]
         want.extend((s + offset, v) for s, v in resumed.get(tag, []))
         want.sort(key=lambda x: (x[0], x[1]))
         got = sorted(merged[tag], key=lambda x: (x[0], x[1]))

@@ -70,3 +70,29 @@ não aparece. env_stats_max reseta por episódio → valores no cutoff ruidosos,
 usar max-along-time. Falta: B (023, ETA ~17:45) e A (024, ETA ~21:15) pro
 MUST 1; depois stitch das duas (offset 1966080) + tabela comparativa +
 veredito judgement call com o operador.
+
+**2026-09-13 ~18:20 — prévia seed 0 braço B (agente; run terminou 17:51, 3h48m wall, 667 sps).**
+Bug encontrado e corrigido no `tb_stitch.py`: leg1 do B teve overshoot pra
+2.129.920 (job original pedia 2.000.000, SB3 parou na fronteira de update);
+leg1 agora é clipada no offset (steps > offset descartados — o resume re-feita
+esses steps). Stitch validado: 0→10.977.280 contínuo, sem duplicatas.
+
+Cortes B (flags = event÷2): @2M 7/477/6/6/2 → @5,5M 8/800/7/10/3 → @7,3M
+8/744/9/10/3 → @11M **9/840/7/10/3** (flags/coord/levels/maps/mmp). Max-along-run:
+flags 13, coord 1.171, levels 13, maps 12, dex 7, pcount 1, badge 0. Régua
+Brock-level: falha nas 5 (esperado). Saúde ✓ (KL med 0,0074, EV 0,987, 0 wipes,
+deaths/ep med 4).
+
+**B vs acc64 (seed 0) — separação emergindo no último terço**:
+dose-resposta de flags 7,3M→11M: **B Δ+1 (8→9, saturando) vs acc64 Δ+6 (9→15,
+acelerando)**. @11M: flags 9 vs 15, coord 840 vs 1.383, maps 10 vs 13, dex 7=7,
+levels 7≈8. Curva de unique_maps acumulado: idênticas até ~7M (B levemente à
+frente cedo: 9 mapas @4,1M vs 7), depois acc64 abre (13 vs 12). MUST 1: acc64
+não está abaixo de B — está **acima** em flags/coord/maps. mmp travado em 3 nos
+dois (granularidade baixa; operador: usar unique_maps como eixo fino — breadth
+> depth no early game, rewards de depth esparsas). Os dois com pcount 1 (nunca
+capturou 2º pokémon) e dex 7 — nenhum pegou a pokédex; a muralha mmp 3 ↔
+ausência de depth é o gargalo visível. Braço B rodou já com a telemetria de
+footprint nova: pico reportado ~29GB (8 envs stock) — dado pro ticket 18
+(footprint inclui retenção de malloc; comparar com medição externa).
+Falta: A (024, ETA ~21:20) + fase 2 (s1/s2) pro veredito na mediana.
