@@ -35,3 +35,18 @@ exata.
 
 Saída: picos reais por geometria + decisão (dieta sim/não/qual) registrados como
 Answer; números de footprint referenciados nos tickets 07/08.
+
+## Nota (2026-09-13, AM18): footprint real do mega-update no Linux
+
+Bench de geometrias no AM18 (WSL2, cap 24 GB; telemetria corrigida também pro Linux
+nesta sessão — PSS via smaps_rollup + CPU de intervalo): o buffer encadeado de
+163.840 amostras custa **~17 GB** — pico PSS da árvore 22,9 GB nas células B/acc64
+vs 5,9 GB na A (8 envs, updates de 20.480). Bem acima do "~11 GB" da telemetria Mac.
+
+Pro sizing (item 3): 64 lógicas no AM18 **cabe, no fio** — ~1 GB de folga pro cap;
+qualquer crescimento (fragmentação, soak, episódios maiores) empurra pra swap de 16 GB.
+Pra dieta (item 2): `del` do buffer de cada round após o concat **não** resolve — o
+`ChainedRolloutBuffer` lê as obs dos round buffers durante todo o `train()`, então o
+pico exige todos vivos ao mesmo tempo. As alavancas reais são `np.memmap` das obs,
+mega-update menor (32–48 lógicas), ou mais RAM pro WSL (`.wslconfig`, caixa tem 30 GB).
+Tabela completa: `v2/bench/bench_geometry.csv` + seção Medições do ticket 07.

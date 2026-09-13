@@ -25,15 +25,24 @@ CSV_FIELDS = (
     "n_procs",
 )
 
-# macOS: ps/rss underreports ~4.5x vs Activity Monitor, whose "Memory" column is
-# phys_footprint (resident + compressed + iokit). proc_pid_rusage(RUSAGE_INFO_V4)
-# exposes it; rusage_info_v4 lays uuid[16] then 7 uint64 before resident/footprint.
+# Per-platform semantics (columns keep their names; meanings differ — do NOT
+# compare memory/cpu columns directly across platforms):
+#   macOS: footprint_mb = phys_footprint (Activity Monitor semantics: resident +
+#     compressed + iokit) via proc_pid_rusage; ps/rss underreports ~4.5x vs it.
+#     cpu_pct = ps %cpu, a lifetime average (understates peaks).
+#   Linux: footprint_mb = PSS sum over the tree (smaps_rollup; shared fork pages
+#     split proportionally — RSS sums double-count them). cpu_pct = interval CPU
+#     from /proc stat deltas between samples (100% = one core).
+# rusage_info_v4 lays uuid[16] then 7 uint64 before resident/footprint.
+_SYSTEM = platform.system()
 _libproc = None
-if platform.system() == "Darwin":
+if _SYSTEM == "Darwin":
     try:
         _libproc = ctypes.CDLL(ctypes.util.find_library("proc"))
     except OSError:
         _libproc = None
+
+_CLK_TCK = os.sysconf("SC_CLK_TCK") if _SYSTEM == "Linux" else 100
 
 
 def _phys_footprint_mb(pid: int):
@@ -45,16 +54,48 @@ def _phys_footprint_mb(pid: int):
     return buf[9] / (1024.0 * 1024.0)
 
 
+def _pss_mb(pid: int):
+    """Linux PSS from /proc/<pid>/smaps_rollup; None if unreadable/gone."""
+    try:
+        with open(f"/proc/{pid}/smaps_rollup") as f:
+            for line in f:
+                if line.startswith("Pss:"):
+                    return int(line.split()[1]) / 1024.0
+    except (OSError, ValueError, IndexError):
+        return None
+    return None
+
+
+def _proc_ticks(pid: int):
+    """Linux utime+stime in clock ticks from /proc/<pid>/stat; None if gone."""
+    try:
+        with open(f"/proc/{pid}/stat") as f:
+            data = f.read()
+    except OSError:
+        return None
+    # comm (field 2) is parenthesized and may itself contain spaces/parens.
+    rest = data[data.rfind(")") + 1 :].split()
+    try:
+        return int(rest[11]) + int(rest[12])  # utime, stime (fields 14, 15)
+    except (ValueError, IndexError):
+        return None
+
+
 def _parse_float(value: str) -> float:
     return float(value.replace(",", "."))
 
 
-def process_tree_stats(root_pid: int):
+def process_tree_stats(root_pid: int, cpu_state: dict | None = None):
     """Return (rss_mb, footprint_mb, cpu_pct, n_procs) for root_pid and descendants.
 
     footprint_mb sums phys_footprint (Activity Monitor semantics) on macOS and
-    falls back to rss elsewhere. Summing footprints may double-count pages
-    shared between parent and children.
+    PSS on Linux, falling back to rss on either. Summing phys_footprint may
+    double-count pages shared between parent and children; PSS does not.
+
+    cpu_pct sums ps %cpu (lifetime average) unless cpu_state is provided on
+    Linux: pass the same dict across calls and cpu_pct becomes the tree's
+    interval CPU since the previous call (100% = one core). The first call
+    with a fresh dict establishes the baseline and reports 0.
     """
     env = os.environ.copy()
     env["LC_ALL"] = "C"
@@ -83,20 +124,43 @@ def process_tree_stats(root_pid: int):
 
     stack = [root_pid]
     seen = set()
-    rss_kb = 0
-    footprint_mb = 0.0
-    cpu = 0.0
     while stack:
         pid = stack.pop()
         if pid in seen or pid not in by_pid:
             continue
         seen.add(pid)
+        stack.extend(children.get(pid, []))
+
+    rss_kb = 0
+    footprint_mb = 0.0
+    cpu = 0.0
+    for pid in seen:
         r, c = by_pid[pid]
         rss_kb += r
-        fp = _phys_footprint_mb(pid)
+        if _SYSTEM == "Linux":
+            fp = _pss_mb(pid)
+        else:
+            fp = _phys_footprint_mb(pid)
         footprint_mb += fp if fp is not None else r / 1024.0
         cpu += c
-        stack.extend(children.get(pid, []))
+
+    if cpu_state is not None and _SYSTEM == "Linux":
+        now = time.monotonic()
+        ticks = {}
+        for pid in seen:
+            t = _proc_ticks(pid)
+            if t is not None:
+                ticks[pid] = t
+        prev_t = cpu_state.get("t")
+        prev = cpu_state.get("ticks", {})
+        if prev_t is not None:
+            dt = max(now - prev_t, 1e-6)
+            cpu = sum(t - prev.get(pid, t) for pid, t in ticks.items()) / _CLK_TCK / dt * 100.0
+        else:
+            cpu = 0.0  # baseline sample; no interval to measure yet
+        cpu_state["t"] = now
+        cpu_state["ticks"] = ticks
+
     return rss_kb / 1024.0, footprint_mb, cpu, len(seen)
 
 
@@ -123,6 +187,7 @@ class ResourceCallback(BaseCallback):
         self.peak_footprint_mb = 0.0
         self.peak_cpu = 0.0
         self.samples = []
+        self._cpu_state: dict = {}
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread = None
@@ -170,7 +235,7 @@ class ResourceCallback(BaseCallback):
         game_s = steps * self.action_freq / GB_FPS
         per_env_game_s = game_s / max(self.num_envs, 1)
         per_env_speedup = per_env_game_s / max(wall_s, 1e-6)
-        rss_mb, footprint_mb, cpu_pct, n_procs = process_tree_stats(self.root_pid)
+        rss_mb, footprint_mb, cpu_pct, n_procs = process_tree_stats(self.root_pid, self._cpu_state)
         self.peak_rss_mb = max(self.peak_rss_mb, rss_mb)
         self.peak_footprint_mb = max(self.peak_footprint_mb, footprint_mb)
         self.peak_cpu = max(self.peak_cpu, cpu_pct)
@@ -222,14 +287,25 @@ class ResourceCallback(BaseCallback):
         if not self.samples:
             return
         last = self.samples[-1]
+        if _SYSTEM == "Darwin":
+            fp_note = "phys_footprint, ~= Activity Monitor"
+            rss_note = "resident only; ~4.5x below footprint on macOS"
+            cpu_note = "ps %cpu lifetime average; understates peaks"
+        elif _SYSTEM == "Linux":
+            fp_note = "PSS sum over tree; shared fork pages split proportionally"
+            rss_note = "sum of per-process RSS; double-counts shared fork pages"
+            cpu_note = "interval CPU between samples"
+        else:
+            fp_note = rss_note = cpu_note = "rss fallback"
+        threads = os.cpu_count() or "?"
         lines = [
             f"wall_minutes={last['wall_s'] / 60:.1f}",
             f"timesteps={last['timesteps']}",
             f"avg_sps={last['avg_sps']:.1f}",
             f"per_env_speedup={last['per_env_speedup']:.2f}x  # game-seconds per env / wall-seconds",
-            f"peak_footprint_mb={self.peak_footprint_mb:.1f}  # phys_footprint, ~= Activity Monitor",
-            f"peak_rss_mb={self.peak_rss_mb:.1f}  # resident only; ~4.5x below footprint on macOS",
-            f"peak_cpu_pct={self.peak_cpu:.1f}  # 100% = one core; this Mac has 10",
+            f"peak_footprint_mb={self.peak_footprint_mb:.1f}  # {fp_note}",
+            f"peak_rss_mb={self.peak_rss_mb:.1f}  # {rss_note}",
+            f"peak_cpu_pct={self.peak_cpu:.1f}  # {cpu_note}; 100% = one core, host has {threads} threads",
             f"num_envs={self.num_envs}",
             f"action_freq={self.action_freq}",
             "",

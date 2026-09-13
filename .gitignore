@@ -21,6 +21,7 @@ venv*
 .python-version
 v2/logs/
 v2/baselines/
+v2/bench/
 v2/archive/
 v2/jobs/done/
 v2/jobs/failed/

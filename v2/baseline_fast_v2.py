@@ -73,6 +73,26 @@ def parse_args():
     )
     p.add_argument("--total-timesteps", type=int, default=None, help="Exact SB3 timestep budget. Overrides --minutes.")
     p.add_argument(
+        "--target-steps",
+        type=int,
+        default=None,
+        help=(
+            "Absolute lineage step count to train up to (requires a checkpoint). "
+            "Resumes with the global clock (reset_num_timesteps=False): TB and "
+            "checkpoint names continue from --base-steps instead of restarting at 0."
+        ),
+    )
+    p.add_argument(
+        "--base-steps",
+        type=int,
+        default=None,
+        help=(
+            "Lineage steps the loaded checkpoint represents. Default: num_timesteps "
+            "stored in the zip. Set explicitly for legs trained with "
+            "reset_num_timesteps=True (e.g. Mac t16 zips: 10977280)."
+        ),
+    )
+    p.add_argument(
         "--max-steps",
         type=int,
         default=2048 * 80,
@@ -245,6 +265,8 @@ if __name__ == "__main__":
     physical_envs, rounds = resolve_geometry(args.num_envs, physical_cap)
 
     sps = args.sps if args.sps is not None else physical_envs * SPS_PER_ENV
+    if args.target_steps is not None and (args.total_timesteps is not None or args.minutes is not None):
+        raise SystemExit("--target-steps is an absolute lineage target; do not combine with --total-timesteps/--minutes")
     if args.total_timesteps is not None:
         total_timesteps = args.total_timesteps
     elif args.minutes is not None:
@@ -328,6 +350,29 @@ if __name__ == "__main__":
             **({"accumulation_rounds": rounds} if rounds > 1 else {}),
         )
 
+    reset_num_timesteps = True
+    if args.target_steps is not None:
+        if not (file_name and exists(file_name + ".zip")):
+            raise SystemExit("--target-steps requires a loadable checkpoint (--checkpoint/--resume/stdin)")
+        base_steps = args.base_steps if args.base_steps is not None else model.num_timesteps
+        additional = args.target_steps - base_steps
+        if additional <= 0:
+            raise SystemExit(
+                f"--target-steps ({args.target_steps}) <= base steps ({base_steps}); nothing to train"
+            )
+        # Continue the lineage clock: SB3 keeps num_timesteps when
+        # reset_num_timesteps=False, so TB and checkpoint names stay on the
+        # global step count and no tb_stitch/offset is needed downstream.
+        model.num_timesteps = base_steps
+        # Keep this leg's TB in its own session dir (loaded models otherwise
+        # keep writing to the original run's tensorboard_log path). Steps
+        # continue globally either way, so multi-dir TB/extraction stays one
+        # continuous series.
+        model.tensorboard_log = str(sess_path)
+        total_timesteps = additional
+        reset_num_timesteps = False
+        print(f"resume-global: base={base_steps} target={args.target_steps} additional={additional}")
+
     print(model.policy)
     completed = False
     start_ts = datetime.now().astimezone().isoformat()
@@ -336,6 +381,7 @@ if __name__ == "__main__":
             total_timesteps=total_timesteps,
             callback=CallbackList(callbacks),
             tb_log_name="poke_ppo",
+            reset_num_timesteps=reset_num_timesteps,
         )
         completed = True
     finally:
