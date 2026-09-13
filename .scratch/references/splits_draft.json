@@ -1,0 +1,159 @@
+{
+  "meta": {
+    "source_splits": ".scratch/references/splits.txt",
+    "events_source": "v2/events.json (identical to baselines/events.json)",
+    "badge_byte": "0xD356; bit order (DataCrystal/pret): bit0=Boulder, bit1=Cascade, bit2=Thunder, bit3=Rainbow, bit4=Soul, bit5=Marsh, bit6=Volcano, bit7=Earth",
+    "map_id_address": "0xD35E",
+    "playtime_clock": "wPlayTimeHours 0xDA41: +0 hours (binary, caps at 0xFF), +1 wPlayTimeMaxed flag, +2 minutes, +3 seconds, +4 frames (60 fps). Plain binary, NOT BCD (engine/play_time.asm). Hardware-independent timebase for comparing split times against speedrunner WRs.",
+    "battle_state": "wIsInBattle 0xD057: 0=none, 1=wild, 2=trainer, -1=just lost",
+    "livesplit_crosscheck": "2026-09-11: cross-checked DeepSeek's LiveSplit.PokemonRedBlue research (.scratch/references/auto-splitters-research.md) against the pokered disassembly. ADOPTED (verified): Bill/SS Ticket, HM01, Bike, HM02, Poke Flute splits below. REJECTED (wrong in doc): $D358==2 HOF condition ($D358 is wLetterPrintingDelayFlags, zeroed during HOF), $D371 'RNG byte' (it's the north-connection map header; real RNG is hRandomAdd/hRandomSub at HRAM $FFD3/$FFD4), Articuno $D782 (unnamed padding; correct is 0xD882-2), Silph Rival $D7EB (that's the Route 22 rival byte; correct is 0xD82F-0), 'one full byte per event' claim (wEventFlags is a bitfield, index/8 + index%8), 'gym flags start at $D600' (wEventFlags starts at $D747).",
+    "v2_event_scan_range": "v2/red_gym_env_v2.py read_event_bits() reads range(0xD747, 0xD87E), i.e. bytes 0xD747-0xD87D inclusive. bytes 0xD87E-0xD886 are defined in events.json but NOT scanned by v2. None of the splits below require that gap, which contains only Rock Tunnel 2 Trainer 7, Seafoam boulder-puzzle bits, and Beat Articuno.",
+    "note_on_badges_vs_events": "Gym splits have both a badge bit and a 'Beat <Gym Leader>' event flag; either works. Badge bit is monotonic per-gym; event flag fires at battle end. Prefer the event flag for exact split timing, the badge bit for robustness."
+  },
+  "splits": [
+    {
+      "split_name": "Brock",
+      "condition_type": "badge_bit",
+      "addresses": ["0xD356", "0xD755"],
+      "bits": [0, 7],
+      "event_name": "Boulder Badge (bit 0 of 0xD356); event flag 0xD755-7 'Beat Brock'",
+      "confidence": "high",
+      "notes": "Boulder Badge = bit 0. Alternative: event flag 0xD755-7 'Beat Brock' fires at end of the gym battle."
+    },
+    {
+      "split_name": "Mt. Moon",
+      "condition_type": "combo",
+      "addresses": ["0xD7F6", "0xD35E"],
+      "bits": [1],
+      "event_name": "0xD7F6-1 'Beat Mt Moon Exit Super Nerd' + map_entry to Route 4 (map id 15 / 0x0F)",
+      "confidence": "medium",
+      "notes": "No single 'cleared Mt. Moon' event flag exists. Proxy: the Super Nerd fossil-grant battle at the B2F exit fires 0xD7F6-1; combine with map id 15 (Route 4, per v2/map_data.json) to confirm the player actually exited the cave rather than only beating the fight. Map ids: Mt Moon 1F=59 (0x3B), B1F=60 (0x3C), B2F=61 (0x3D). Weaker single-condition fallback: 0xD7F6-6 'Got Dome Fossil' OR 0xD7F6-7 'Got Helix Fossil' (pick-one fossil choice also marks cave completion)."
+    },
+    {
+      "split_name": "Rival (Nugget Bridge)",
+      "condition_type": "event_bit",
+      "addresses": ["0xD7EF"],
+      "bits": [1],
+      "event_name": "0xD7EF-1 'Beat Route24 Rocket'",
+      "confidence": "high",
+      "notes": "The Rocket fight at the north end of Nugget Bridge is the standard Nugget Bridge endpoint. Alternative: 0xD7EF-0 'Got Nugget' (fires when the bridge guard rewards the nugget). Split-picture list calls this split 'Nugget Bridge'."
+    },
+    {
+      "split_name": "Misty",
+      "condition_type": "badge_bit",
+      "addresses": ["0xD356", "0xD75E"],
+      "bits": [1, 7],
+      "event_name": "Cascade Badge (bit 1 of 0xD356); event flag 0xD75E-7 'Beat Misty'",
+      "confidence": "high",
+      "notes": "Cascade Badge = bit 1. Event-flag alternative 0xD75E-7."
+    },
+    {
+      "split_name": "Bill (S.S. Ticket)",
+      "condition_type": "event_bit",
+      "addresses": ["0xD7F2"],
+      "bits": [4],
+      "event_name": "0xD7F2-4 'Got SS Ticket' (EVENT_GOT_SS_TICKET)",
+      "confidence": "high",
+      "notes": "Set when Bill hands over the ticket after the Cell Separator scene; the standard 'Bill' split in LiveSplit.PokemonRedBlue. Bit 3 of the same byte ('Used Cell Separator on Bill') fires seconds earlier. Verified against event_constants.asm (index 0x55C)."
+    },
+    {
+      "split_name": "HM01 Cut",
+      "condition_type": "event_bit",
+      "addresses": ["0xD803"],
+      "bits": [0],
+      "event_name": "0xD803-0 'Got HM01' (EVENT_GOT_HM01)",
+      "confidence": "high",
+      "notes": "Received from the S.S. Anne captain. Watch the bit, not the byte: same byte holds 'SS Anne Left' (bit 2). Verified (index 0x5E0). Route order: after Bill, before Lt. Surge (Cut is required to enter Vermilion Gym)."
+    },
+    {
+      "split_name": "Bike",
+      "condition_type": "event_bit",
+      "addresses": ["0xD75F"],
+      "bits": [0],
+      "event_name": "0xD75F-0 'Got Bicycle' (EVENT_GOT_BICYCLE)",
+      "confidence": "high",
+      "notes": "Sole named event in byte 0xD75F, so a byte!=0 watch is equivalent. Verified (index 0x0C0)."
+    },
+    {
+      "split_name": "HM02 Fly",
+      "condition_type": "event_bit",
+      "addresses": ["0xD7E0"],
+      "bits": [6],
+      "event_name": "0xD7E0-6 'Got HM02' (EVENT_GOT_HM02)",
+      "confidence": "high",
+      "notes": "Route 16 gate house, requires cutting past the Route 12/16 Snorlax area. Same byte also holds 'Beat Route 16 Snorlax' (bit 1) and its fight-start bit (bit 0) — watch bit 6 specifically. Verified (index 0x4CE)."
+    },
+    {
+      "split_name": "Poke Flute",
+      "condition_type": "event_bit",
+      "addresses": ["0xD76C"],
+      "bits": [0],
+      "event_name": "0xD76C-0 'Got Poke Flute' (EVENT_GOT_POKE_FLUTE)",
+      "confidence": "high",
+      "notes": "Reward at the top of Pokemon Tower (implies the Tower rival fight: 0xD764-7 'Beat Pokemon Tower Rival'). Verified (index 0x128)."
+    },
+    {
+      "split_name": "Lt. Surge",
+      "condition_type": "badge_bit",
+      "addresses": ["0xD356", "0xD773"],
+      "bits": [2, 7],
+      "event_name": "Thunder Badge (bit 2 of 0xD356); event flag 0xD773-7 'Beat Lt Surge'",
+      "confidence": "high",
+      "notes": "Thunder Badge = bit 2. Event-flag alternative 0xD773-7."
+    },
+    {
+      "split_name": "Erika",
+      "condition_type": "badge_bit",
+      "addresses": ["0xD356", "0xD77C"],
+      "bits": [3, 1],
+      "event_name": "Rainbow Badge (bit 3 of 0xD356); event flag 0xD77C-1 'Beat Erika'",
+      "confidence": "high",
+      "notes": "Rainbow Badge = bit 3. Event-flag alternative 0xD77C-1. Note: in badge acquisition order Erika usually comes after Koga in Any% glitchless routing, but the badge bit ordering is fixed."
+    },
+    {
+      "split_name": "Koga",
+      "condition_type": "badge_bit",
+      "addresses": ["0xD356", "0xD792"],
+      "bits": [4, 1],
+      "event_name": "Soul Badge (bit 4 of 0xD356); event flag 0xD792-1 'Beat Koga'",
+      "confidence": "high",
+      "notes": "Soul Badge = bit 4. Event-flag alternative 0xD792-1."
+    },
+    {
+      "split_name": "Sabrina",
+      "condition_type": "badge_bit",
+      "addresses": ["0xD356", "0xD7B3"],
+      "bits": [5, 1],
+      "event_name": "Marsh Badge (bit 5 of 0xD356); event flag 0xD7B3-1 'Beat Sabrina'",
+      "confidence": "high",
+      "notes": "Marsh Badge = bit 5. Event-flag alternative 0xD7B3-1."
+    },
+    {
+      "split_name": "Blaine",
+      "condition_type": "badge_bit",
+      "addresses": ["0xD356", "0xD79A"],
+      "bits": [6, 1],
+      "event_name": "Volcano Badge (bit 6 of 0xD356); event flag 0xD79A-1 'Beat Blaine'",
+      "confidence": "high",
+      "notes": "Volcano Badge = bit 6. Event-flag alternative 0xD79A-1."
+    },
+    {
+      "split_name": "Giovanni",
+      "condition_type": "badge_bit",
+      "addresses": ["0xD356", "0xD751"],
+      "bits": [7, 1],
+      "event_name": "Earth Badge (bit 7 of 0xD356); event flag 0xD751-1 'Beat Viridian Gym Giovanni'",
+      "confidence": "high",
+      "notes": "Earth Badge = bit 7 (final badge, Viridian Gym revisit). Event-flag alternative 0xD751-1. Do not confuse with 0xD81B-7 'Beat Rocket Hideout Giovanni' (earlier Silph/Game-Corner-hideout fight); the split-picture list labels this split 'Giovanni' = Viridian Gym."
+    },
+    {
+      "split_name": "Hall of Fame",
+      "condition_type": "event_bit",
+      "addresses": ["0xD867"],
+      "bits": [1],
+      "event_name": "0xD867-1 'Beat Champion Rival'",
+      "confidence": "high",
+      "notes": "Standard tracker proxy for the run end. The literal HOF screen is a scripted sequence in Indigo Plateau (map id 9 / 0x09); 0xD867-1 fires at the end of the Champion battle, seconds before the Hall of Fame screen. Related: 0xD747-3 'Hall Of Fame Dex Rating' fires during the post-game dex rating, too late for timer stop. Elite Four sub-splits if ever needed: 0xD866-6 'Beat Lance', room-entry bits 0xD863-6/0xD864-6/0xD865-6 (autowalked into Lorelei/Bruno/Agatha rooms)."
+    }
+  ]
+}

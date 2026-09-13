@@ -1,0 +1,28 @@
+{
+  "mcpServers": {
+    "prometheus-tower": {
+      "command": "docker",
+      "args": [
+        "run", "--rm", "-i",
+        "ghcr.io/tjhop/prometheus-mcp-server:latest",
+        "--prometheus.url", "http://100.111.43.28:9090",
+        "--prometheus.truncation-limit", "200"
+      ]
+    },
+    "grafana-tower": {
+      "command": "docker",
+      "args": [
+        "run", "--rm", "-i",
+        "-e", "GRAFANA_URL",
+        "-e", "GRAFANA_SERVICE_ACCOUNT_TOKEN",
+        "mcp/grafana:latest",
+        "-t", "stdio"
+      ]
+    },
+    "cursor-delegate": {
+      "command": "npx",
+      "args": ["-y", "cursor-delegate-mcp"],
+      "toolTimeoutMs": 1800000
+    }
+  }
+}

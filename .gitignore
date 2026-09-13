@@ -26,11 +26,6 @@ v2/jobs/done/
 v2/jobs/failed/
 v2/jobs/*.status
 v2/jobs/.queue.lock
-docs/
-.scratch/
-AGENTS.md
-CONTEXT.md
-.kimi-code/
 v3/runs/
 v3/jobs/done/
 v3/jobs/failed/
@@ -41,4 +36,3 @@ v3/milestones.jsonl
 v3/champion.json
 v3/champion/
 v2/.tb_logs/
-INBOX.md

@@ -1,0 +1,14 @@
+{
+  "name": "t05_g2560_s0",
+  "args": [
+    "--num-envs", "8",
+    "--n-steps", "2560",
+    "--max-steps", "16384",
+    "--total-timesteps", "2000000",
+    "--seed", "0",
+    "--no-stream",
+    "--save-final-state",
+    "--session-path", "runs_t05_g2560_s0",
+    "--backup", "t05_g2560_s0"
+  ]
+}

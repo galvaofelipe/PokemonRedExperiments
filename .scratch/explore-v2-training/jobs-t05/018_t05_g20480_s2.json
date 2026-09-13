@@ -1,0 +1,14 @@
+{
+  "name": "t05_g20480_s2",
+  "args": [
+    "--num-envs", "8",
+    "--n-steps", "20480",
+    "--max-steps", "16384",
+    "--total-timesteps", "2000000",
+    "--seed", "2",
+    "--no-stream",
+    "--save-final-state",
+    "--session-path", "runs_t05_g20480_s2",
+    "--backup", "t05_g20480_s2"
+  ]
+}
