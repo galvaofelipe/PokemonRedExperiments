@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import shutil
 import socket
 import sys
@@ -13,6 +14,7 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import SubprocVecEnv
 from stable_baselines3.common.utils import set_random_seed
 from stable_baselines3.common.callbacks import CheckpointCallback, CallbackList
+from accumulator_ppo import AccumulatingPPO
 from tensorboard_callback import TensorboardCallback
 from resource_callback import ResourceCallback
 
@@ -21,11 +23,41 @@ from resource_callback import ResourceCallback
 SPS_PER_ENV = 90
 
 
+def resolve_geometry(logical_envs: int, physical_envs: int | None) -> tuple[int, int]:
+    """Resolve (physical_envs, rounds) from logical streams and the physical cap.
+
+    physical_envs None/absent means physical = logical (bit-identical to the
+    pre-accumulator behavior). logical must be divisible by physical.
+    """
+    physical = physical_envs if physical_envs is not None else logical_envs
+    if physical < 1 or logical_envs % physical != 0:
+        raise SystemExit(
+            f"--num-envs ({logical_envs} logical streams) must be divisible by the "
+            f"physical env cap ({physical}); got remainder {logical_envs % max(physical, 1)}"
+        )
+    return physical, logical_envs // physical
+
+
 def parse_args():
     p = argparse.ArgumentParser(
         description="Train PPO on Pokemon Red (v2). Override env_config and run length from the CLI."
     )
-    p.add_argument("--num-envs", type=int, default=64, help="Parallel envs (also rollout width). 6 is safer on 16GB.")
+    p.add_argument(
+        "--num-envs",
+        type=int,
+        default=64,
+        help="Logical streams the experiment asks for (= rollout width). 6 physical is safer on 16GB.",
+    )
+    p.add_argument(
+        "--physical-envs",
+        type=int,
+        default=None,
+        help=(
+            "Physical subprocess cap. Default: V2_PHYSICAL_ENVS env var, else = --num-envs "
+            "(stock behavior). num_envs must be divisible by the resolved physical count; "
+            "rounds = logical / physical frozen-policy rollouts accumulate into one mega-update."
+        ),
+    )
     p.add_argument("--session-path", type=Path, default=Path("runs"))
     p.add_argument(
         "--minutes",
@@ -205,7 +237,14 @@ if __name__ == "__main__":
         "explore_weight": args.explore_weight,
     }
 
-    sps = args.sps if args.sps is not None else args.num_envs * SPS_PER_ENV
+    env_var = os.environ.get("V2_PHYSICAL_ENVS", "").strip()
+    if args.physical_envs is not None:
+        physical_cap = args.physical_envs
+    else:
+        physical_cap = int(env_var) if env_var else None
+    physical_envs, rounds = resolve_geometry(args.num_envs, physical_cap)
+
+    sps = args.sps if args.sps is not None else physical_envs * SPS_PER_ENV
     if args.total_timesteps is not None:
         total_timesteps = args.total_timesteps
     elif args.minutes is not None:
@@ -220,25 +259,29 @@ if __name__ == "__main__":
 
     print(env_config)
     print(
+        f"logical={args.num_envs} physical={physical_envs} rounds={rounds} "
+        f"update={n_steps * args.num_envs}"
+    )
+    print(
         f"num_envs={args.num_envs} n_steps={n_steps} total_timesteps={total_timesteps} "
         f"save_freq={save_freq} assumed_sps={sps:.0f} "
         f"est_hours={total_timesteps / sps / 3600:.1f} stream={args.stream} "
         f"checkpoint={file_name or '(none)'}"
     )
-    if args.num_envs > 12:
-        print("warning: --num-envs > 12 is likely to OOM on a 16GB Mac")
+    if physical_envs > 12:
+        print("warning: physical envs > 12 is likely to OOM on a 16GB Mac")
 
     env = SubprocVecEnv(
         [
             make_env(i, env_config, seed=args.seed, stream=args.stream, stream_user=args.stream_user)
-            for i in range(args.num_envs)
+            for i in range(physical_envs)
         ]
     )
 
     callbacks = [
         CheckpointCallback(save_freq=save_freq, save_path=sess_path, name_prefix="poke"),
         TensorboardCallback(sess_path),
-        ResourceCallback(sess_path, num_envs=args.num_envs, action_freq=args.action_freq),
+        ResourceCallback(sess_path, num_envs=physical_envs, action_freq=args.action_freq),
     ]
 
     if args.use_wandb:
@@ -257,18 +300,22 @@ if __name__ == "__main__":
         )
         callbacks.append(WandbCallback())
 
+    ppo_cls = AccumulatingPPO if rounds > 1 else PPO
+
     if file_name and exists(file_name + ".zip"):
         print("\nloading checkpoint")
-        model = PPO.load(file_name, env=env)
+        model = ppo_cls.load(file_name, env=env)
         model.n_steps = n_steps
-        model.n_envs = args.num_envs
+        model.n_envs = physical_envs
         model.rollout_buffer.buffer_size = n_steps
-        model.rollout_buffer.n_envs = args.num_envs
+        model.rollout_buffer.n_envs = physical_envs
         model.rollout_buffer.reset()
+        if rounds > 1:
+            model.accumulation_rounds = rounds
     else:
         if file_name:
             print(f"checkpoint not found: {file_name}.zip (starting fresh)")
-        model = PPO(
+        model = ppo_cls(
             "MultiInputPolicy",
             env,
             verbose=1,
@@ -278,6 +325,7 @@ if __name__ == "__main__":
             gamma=0.997,
             ent_coef=0.01,
             tensorboard_log=sess_path,
+            **({"accumulation_rounds": rounds} if rounds > 1 else {}),
         )
 
     print(model.policy)
