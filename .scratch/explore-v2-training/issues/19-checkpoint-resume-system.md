@@ -1,7 +1,7 @@
 # 19 — Sistema de checkpoints/resume (aposentar os gimmicks)
 
 Type: task
-Status: open
+Status: ready-for-agent
 Blocked by: —
 
 ## Question
@@ -42,4 +42,28 @@ Critério de aceite: rodar a fila 022–024 (ou equivalente) no AM18 com checkpo
 vindos do share — sem tb_stitch, sem offset manual na extração, sem fixup de
 acumulador no código chamador, e TB contínuo 0→11M na extração.
 
+**Workflow primário: "continuar run por mais N steps".** O caso de uso que este
+ticket destrava é estender uma run viva: novo job referencia o checkpoint por nome
+lógico + novo `total_timesteps` absoluto da linhagem, e o runner deriva todo o
+resto (geometria, seed, env_config, relógio) do sidecar. Estender = 1 job spec
+curto, zero edição de código, zero mending de TB.
+
 ## Comments
+
+**2026-09-13 — evidência do mending da célula 11M (ticket 17, prévia 18:20).**
+O remendo que o `tb_stitch.py` precisou fazer hoje mostra as duas falhas
+concretas que este ticket aposenta:
+
+1. **Overshoot da perna anterior**: SB3 só para na fronteira de update, então a
+   leg1 logou steps além do checkpoint de resume (`runs_t05_g20480_s0`: eventos
+   TB até ~2,13M com resume feito do zip `poke_1966080_steps`). O resume re-executa
+   esse delta → sem clip no offset, a série fica com steps duplicados leg1/leg2.
+   → Seleção de checkpoint deve ser "maior zip ≤ ponto de resume pretendido" e o
+   relógio restaurado torna o delta re-executado invisível (steps globais únicos).
+2. **Relógio zerado na perna continuada**: `reset_num_timesteps=True` (default)
+   logou a leg2 do step 0 → shift manual de +1.966.080 na extração.
+   → Item 2 acima aposenta.
+
+Com o relógio restaurado + sidecar de step absoluto, overshoot deixa de ser
+problema: o delta re-executado simplesmente sobrescreve/continua a numeração
+global e o TB sai contínuo sem cirurgia.
