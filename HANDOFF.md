@@ -66,6 +66,17 @@ from Git Bash call `MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' wsl.exe -d Ubuntu
 
 ## Open threads
 
+- **`.wslconfig` upgrade (operator, needs `wsl --shutdown` — apply between
+  sessions):** `memory=26GB`, `swap=32GB` (swap is a sparse VHDX on the Windows
+  drive; only consumes disk as used — needs headroom on C:). 26/32 absorbs the
+  acc64 peak (~27.6 GB demand) slow-not-crashed; go `memory=27GB`–`28GB` if the
+  BIOS UMA shrink below lands. If the box is used as a desktop while training,
+  stay at 24–26 GB memory so Windows keeps 4+ GB.
+- **BIOS: 4 GB hardware-reserved RAM** = iGPU UMA framebuffer (Radeon 780M;
+  workload is headless). Look for "UMA Frame Buffer Size" / "iGPU Memory" (often
+  Advanced → AMD CBS → NBIO → GFX). 1–2 GB is plenty; frees 2–3 GB system RAM.
+- **Ticket 21**: audit where the accumulator's ~105 KB/sample goes (obs space is
+  ~21.6 KB) — dtype casts, train-phase transients, allocator fragmentation.
 - cursor-delegate MCP untested in WSL (needs cursor-agent CLI; `doctor` deep:true).
 - fstab/`~/.smbcredentials` persistence for the share — still TODO.
 - kimi `/login` + `GITHUB_PERSONAL_ACCESS_TOKEN` export on this box (GitHub MCP).
