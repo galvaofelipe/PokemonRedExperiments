@@ -6,7 +6,7 @@ from pathlib import Path
 from frozen.eval.maps import maps_seen_names
 from frozen.scorer import SCORE_VERSION
 
-SCORECARD_VERSION = "1.1.0"
+SCORECARD_VERSION = "1.2.0"
 
 COMPONENT_KEYS = (
     "badges",
@@ -32,6 +32,7 @@ def build_scorecard(
     init_states: list[dict],
     episodes: list[dict],
     episode_splits=None,
+    episode_route=None,
 ) -> dict:
     if not episodes:
         raise ValueError("scorecard requires at least one episode")
@@ -60,6 +61,8 @@ def build_scorecard(
         }
         if episode_splits is not None:
             entry["splits"] = {"achieved": list(episode_splits[idx][1])}
+        if episode_route is not None:
+            entry["route"] = {"achieved": list(episode_route[idx][1])}
         public_episodes.append(entry)
 
     result = {
@@ -84,6 +87,10 @@ def build_scorecard(
         from frozen.splits import aggregate_splits_section
 
         result["splits"] = aggregate_splits_section(episode_splits)
+    if episode_route is not None:
+        from frozen.route import aggregate_route_section
+
+        result["route"] = aggregate_route_section(episode_route)
     return result
 
 

@@ -1,0 +1,333 @@
+{
+  "meta": {
+    "source_spine": ".scratch/references/v3-obs-ram-map.json any_percent_spine",
+    "maps_source": "v3/frozen/maps/maps.json via load_maps()",
+    "splits_source": "v3/frozen/splits/splits.json (issue 05)",
+    "events_source": "v3/frozen/env/events.json + v3-obs-ram-map.json event_bits",
+    "bag_source": "wBagItems 0xD31E / wNumBagItems 0xD31D; CARD_KEY 0x30 SECRET_KEY 0x2B (no GOT event)",
+    "note": "maps[] are pret consts. Edges are required-before: parents must be achieved before a node is on the frontier. Hits may fire out of order. Bike and HM02 stay splits-only."
+  },
+  "spine": [
+    "parcel",
+    "pokedex",
+    "boulder",
+    "fossil_xor",
+    "cascade",
+    "ss_ticket",
+    "hm01_before_anne_leaves",
+    "thunder",
+    "silph_scope",
+    "poke_flute",
+    "saffron_drink",
+    "card_key",
+    "silph_giovanni",
+    "soul",
+    "hm03",
+    "hm04",
+    "surf",
+    "secret_key",
+    "volcano",
+    "earth",
+    "victory_road",
+    "elite_four",
+    "hof"
+  ],
+  "nodes": [
+    {
+      "id": "parcel",
+      "kind": "event_bit",
+      "hit": {
+        "type": "event_bit",
+        "event": "EVENT_GOT_OAKS_PARCEL",
+        "addr": "0xD74E",
+        "bit": 1
+      },
+      "maps": ["VIRIDIAN_MART"],
+      "spine": true
+    },
+    {
+      "id": "pokedex",
+      "kind": "event_bit",
+      "hit": {
+        "type": "event_bit",
+        "event": "EVENT_GOT_POKEDEX",
+        "addr": "0xD74B",
+        "bit": 5
+      },
+      "maps": ["OAKS_LAB"],
+      "spine": true
+    },
+    {
+      "id": "boulder",
+      "kind": "split",
+      "hit": {"type": "split", "split_name": "Brock"},
+      "maps": ["VIRIDIAN_FOREST", "PEWTER_GYM"],
+      "spine": true
+    },
+    {
+      "id": "fossil_xor",
+      "kind": "split",
+      "hit": {"type": "split", "split_name": "Mt. Moon"},
+      "maps": ["MT_MOON_1F", "MT_MOON_B1F", "MT_MOON_B2F"],
+      "spine": true
+    },
+    {
+      "id": "cascade",
+      "kind": "split",
+      "hit": {"type": "split", "split_name": "Misty"},
+      "maps": ["CERULEAN_GYM"],
+      "spine": true,
+      "parallel_group": "cerulean_fork"
+    },
+    {
+      "id": "ss_ticket",
+      "kind": "split",
+      "hit": {"type": "split", "split_name": "Bill (S.S. Ticket)"},
+      "maps": ["BILLS_HOUSE"],
+      "spine": true,
+      "parallel_group": "cerulean_fork"
+    },
+    {
+      "id": "nugget_bridge",
+      "kind": "split",
+      "hit": {"type": "split", "split_name": "Rival (Nugget Bridge)"},
+      "maps": [],
+      "spine": false,
+      "parallel_group": "cerulean_fork"
+    },
+    {
+      "id": "hm01_before_anne_leaves",
+      "kind": "split",
+      "hit": {"type": "split", "split_name": "HM01 Cut"},
+      "maps": ["VERMILION_DOCK", "SS_ANNE_2F", "SS_ANNE_CAPTAINS_ROOM"],
+      "spine": true
+    },
+    {
+      "id": "thunder",
+      "kind": "split",
+      "hit": {"type": "split", "split_name": "Lt. Surge"},
+      "maps": ["VERMILION_GYM"],
+      "spine": true,
+      "parallel_group": "post_cut"
+    },
+    {
+      "id": "erika",
+      "kind": "split",
+      "hit": {"type": "split", "split_name": "Erika"},
+      "maps": ["CELADON_GYM"],
+      "spine": false,
+      "parallel_group": "post_cut"
+    },
+    {
+      "id": "silph_scope",
+      "kind": "event_bit",
+      "hit": {
+        "type": "event_bit",
+        "event": "EVENT_BEAT_ROCKET_HIDEOUT_GIOVANNI",
+        "addr": "0xD81B",
+        "bit": 7
+      },
+      "maps": [
+        "ROCKET_HIDEOUT_B1F",
+        "ROCKET_HIDEOUT_B2F",
+        "ROCKET_HIDEOUT_B3F",
+        "ROCKET_HIDEOUT_B4F",
+        "ROCKET_HIDEOUT_ELEVATOR"
+      ],
+      "spine": true,
+      "parallel_group": "post_cut"
+    },
+    {
+      "id": "poke_flute",
+      "kind": "split",
+      "hit": {"type": "split", "split_name": "Poke Flute"},
+      "maps": [
+        "POKEMON_TOWER_1F",
+        "POKEMON_TOWER_2F",
+        "POKEMON_TOWER_3F",
+        "POKEMON_TOWER_4F",
+        "POKEMON_TOWER_5F",
+        "POKEMON_TOWER_6F",
+        "POKEMON_TOWER_7F"
+      ],
+      "spine": true
+    },
+    {
+      "id": "saffron_drink",
+      "kind": "event_bit",
+      "hit": {
+        "type": "event_bit",
+        "event": "BIT_GAVE_SAFFRON_GUARDS_DRINK",
+        "addr": "0xD728",
+        "bit": 6
+      },
+      "maps": ["CELADON_MART_ROOF"],
+      "spine": true
+    },
+    {
+      "id": "card_key",
+      "kind": "bag_item",
+      "hit": {"type": "bag_item", "item": "CARD_KEY", "id": "0x30"},
+      "maps": [
+        "SILPH_CO_1F",
+        "SILPH_CO_2F",
+        "SILPH_CO_3F",
+        "SILPH_CO_4F",
+        "SILPH_CO_5F",
+        "SILPH_CO_6F",
+        "SILPH_CO_7F",
+        "SILPH_CO_8F",
+        "SILPH_CO_9F",
+        "SILPH_CO_10F",
+        "SILPH_CO_11F",
+        "SILPH_CO_ELEVATOR"
+      ],
+      "spine": true
+    },
+    {
+      "id": "silph_giovanni",
+      "kind": "event_bit",
+      "hit": {
+        "type": "event_bit",
+        "event": "EVENT_BEAT_SILPH_CO_GIOVANNI",
+        "addr": "0xD838",
+        "bit": 7
+      },
+      "maps": ["SILPH_CO_11F"],
+      "spine": true
+    },
+    {
+      "id": "sabrina",
+      "kind": "split",
+      "hit": {"type": "split", "split_name": "Sabrina"},
+      "maps": ["SAFFRON_GYM"],
+      "spine": false,
+      "parallel_group": "post_flute"
+    },
+    {
+      "id": "soul",
+      "kind": "split",
+      "hit": {"type": "split", "split_name": "Koga"},
+      "maps": ["FUCHSIA_GYM"],
+      "spine": true,
+      "parallel_group": "post_flute"
+    },
+    {
+      "id": "hm03",
+      "kind": "event_bit",
+      "hit": {
+        "type": "event_bit",
+        "event": "EVENT_GOT_HM03",
+        "addr": "0xD857",
+        "bit": 0
+      },
+      "maps": [
+        "SAFARI_ZONE_GATE",
+        "SAFARI_ZONE_WEST",
+        "SAFARI_ZONE_SECRET_HOUSE"
+      ],
+      "spine": true,
+      "parallel_group": "post_flute"
+    },
+    {
+      "id": "hm04",
+      "kind": "event_bit",
+      "hit": {
+        "type": "event_bit",
+        "event": "EVENT_GOT_HM04",
+        "addr": "0xD78E",
+        "bit": 0
+      },
+      "maps": ["SAFARI_ZONE_WEST"],
+      "spine": true,
+      "parallel_group": "post_flute"
+    },
+    {
+      "id": "surf",
+      "kind": "map_entry",
+      "hit": {"type": "map_entry", "map": "ROUTE_19"},
+      "maps": ["ROUTE_19"],
+      "spine": true
+    },
+    {
+      "id": "secret_key",
+      "kind": "bag_item",
+      "hit": {"type": "bag_item", "item": "SECRET_KEY", "id": "0x2B"},
+      "maps": ["POKEMON_MANSION_B1F"],
+      "spine": true
+    },
+    {
+      "id": "volcano",
+      "kind": "split",
+      "hit": {"type": "split", "split_name": "Blaine"},
+      "maps": ["CINNABAR_GYM"],
+      "spine": true,
+      "parallel_group": "post_flute"
+    },
+    {
+      "id": "earth",
+      "kind": "split",
+      "hit": {"type": "split", "split_name": "Giovanni"},
+      "maps": ["VIRIDIAN_GYM"],
+      "spine": true
+    },
+    {
+      "id": "victory_road",
+      "kind": "map_entry",
+      "hit": {"type": "map_entry", "map": "VICTORY_ROAD_1F"},
+      "maps": ["VICTORY_ROAD_1F", "VICTORY_ROAD_2F", "VICTORY_ROAD_3F"],
+      "spine": true
+    },
+    {
+      "id": "elite_four",
+      "kind": "event_bit",
+      "hit": {
+        "type": "event_bit",
+        "event": "EVENT_BEAT_LANCE",
+        "addr": "0xD866",
+        "bit": 6
+      },
+      "maps": ["LORELEIS_ROOM", "BRUNOS_ROOM", "AGATHAS_ROOM", "LANCES_ROOM"],
+      "spine": true
+    },
+    {
+      "id": "hof",
+      "kind": "split",
+      "hit": {"type": "split", "split_name": "Hall of Fame"},
+      "maps": ["CHAMPIONS_ROOM", "HALL_OF_FAME"],
+      "spine": true
+    }
+  ],
+  "edges": [
+    {"from": "parcel", "to": "pokedex"},
+    {"from": "pokedex", "to": "boulder"},
+    {"from": "boulder", "to": "fossil_xor"},
+    {"from": "fossil_xor", "to": "cascade"},
+    {"from": "fossil_xor", "to": "ss_ticket"},
+    {"from": "fossil_xor", "to": "nugget_bridge"},
+    {"from": "ss_ticket", "to": "hm01_before_anne_leaves"},
+    {"from": "hm01_before_anne_leaves", "to": "thunder"},
+    {"from": "hm01_before_anne_leaves", "to": "erika"},
+    {"from": "hm01_before_anne_leaves", "to": "silph_scope"},
+    {"from": "silph_scope", "to": "poke_flute"},
+    {"from": "poke_flute", "to": "saffron_drink"},
+    {"from": "poke_flute", "to": "soul"},
+    {"from": "poke_flute", "to": "hm03"},
+    {"from": "poke_flute", "to": "hm04"},
+    {"from": "saffron_drink", "to": "card_key"},
+    {"from": "card_key", "to": "silph_giovanni"},
+    {"from": "silph_giovanni", "to": "sabrina"},
+    {"from": "hm03", "to": "surf"},
+    {"from": "soul", "to": "surf"},
+    {"from": "surf", "to": "secret_key"},
+    {"from": "secret_key", "to": "volcano"},
+    {"from": "thunder", "to": "earth"},
+    {"from": "erika", "to": "earth"},
+    {"from": "sabrina", "to": "earth"},
+    {"from": "volcano", "to": "earth"},
+    {"from": "earth", "to": "victory_road"},
+    {"from": "hm04", "to": "victory_road"},
+    {"from": "victory_road", "to": "elite_four"},
+    {"from": "elite_four", "to": "hof"}
+  ]
+}
