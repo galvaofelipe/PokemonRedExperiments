@@ -21,6 +21,11 @@ REFRESH_S = 10
 CHART_SAMPLES = 180
 MA_WINDOW = 10
 SPS_YMAX_FLOOR = 900.0
+GB_FPS = 59.727
+DEFAULT_NUM_ENVS = 64
+DEFAULT_MAX_STEPS = 2048 * 80
+DEFAULT_ACTION_FREQ = 24
+STATE_ORDER = {"running": 0, "queued": 1, "done": 2, "failed": 3}
 
 
 def arg_map(args: list[str]) -> dict[str, str | bool]:
@@ -48,6 +53,21 @@ def planned_steps(amap: dict[str, str | bool]) -> int | None:
         if sps:
             return int(float(amap["minutes"]) * 60 * sps)
     return None
+
+
+def job_recipe(amap: dict[str, str | bool]) -> dict:
+    num_envs = _as_int(amap.get("num-envs")) or DEFAULT_NUM_ENVS
+    max_steps = _as_int(amap.get("max-steps")) or DEFAULT_MAX_STEPS
+    action_freq = _as_int(amap.get("action-freq")) or DEFAULT_ACTION_FREQ
+    n_steps = _as_int(amap.get("n-steps")) or max_steps // 64
+    return {
+        "num_envs": num_envs,
+        "max_steps": max_steps,
+        "n_steps": n_steps,
+        "action_freq": action_freq,
+        "rollout": n_steps * num_envs,
+        "ep_hours": max_steps * action_freq / GB_FPS / 3600,
+    }
 
 
 def read_status(name: str) -> dict[str, str]:
@@ -100,10 +120,15 @@ def load_jobs() -> list[dict]:
                 assumed_sps = float(assumed) if assumed not in (None, "", True, False) else 720.0
             except (TypeError, ValueError):
                 assumed_sps = 720.0
+            recipe = job_recipe(amap)
+            rollout = recipe["rollout"]
+            planned_updates = math.ceil(target / rollout) if target and rollout else None
+            updates = steps // rollout if steps is not None and rollout else None
             rows.append(
                 {
                     "file": path.name,
                     "name": name,
+                    "args": job.get("args") or [],
                     "state": state,
                     "session": session,
                     "backup": str(amap.get("backup") or ""),
@@ -115,13 +140,32 @@ def load_jobs() -> list[dict]:
                     "perf": perf,
                     "series": series,
                     "peak_rss": max((p["rss"] for p in series), default=None),
+                    "peak_fp": max((p["fp"] for p in series), default=None),
                     "ma_sps": moving_avg_series(series, done=state == "done"),
                     "pct": pct,
+                    "num_envs": recipe["num_envs"],
+                    "n_steps": recipe["n_steps"],
+                    "ep_hours": recipe["ep_hours"],
+                    "updates": updates,
+                    "planned_updates": planned_updates,
                 }
             )
-    order = {"running": 0, "queued": 1, "done": 2, "failed": 3}
-    rows.sort(key=lambda r: (order.get(r["state"], 9), r["file"]))
+    rows.sort(key=_job_sort_key)
     return rows
+
+
+def _job_sort_key(row: dict):
+    group = STATE_ORDER.get(row["state"], 9)
+    if row["state"] == "queued":
+        return (group, 0.0, row["file"])
+    start = parse_iso(row.get("start") or "")
+    if row["state"] == "running":
+        ts = start.timestamp() if start else float("inf")
+        return (group, ts, row["file"])
+    end = parse_iso(row.get("end") or "")
+    end_ts = -end.timestamp() if end else 0.0
+    start_ts = -start.timestamp() if start else 0.0
+    return (group, end_ts, start_ts, row["file"])
 
 
 def _as_int(value) -> int | None:
@@ -150,6 +194,7 @@ def load_series(csv_path: Path) -> list[dict]:
                     "avg_sps": float(row["avg_sps"]),
                     "instant_sps": float(row["instant_sps"]),
                     "rss": float(row["rss_mb"]),
+                    "fp": float(row.get("footprint_mb") or row["rss_mb"]),
                     "cpu": float(row.get("cpu_pct") or 0),
                     "speedup": float(row.get("per_env_speedup") or 0),
                     "steps": float(row["timesteps"]),
@@ -232,20 +277,47 @@ def fmt(value, digits=0, suffix="") -> str:
     return f"{n:,.{digits}f}{suffix}"
 
 
-def fmt_ram(mb, peak_mb=None) -> str:
-    if mb in (None, ""):
+def fmt_compact(value) -> str:
+    if value in (None, ""):
         return "—"
-
-    def one(value) -> str:
+    try:
         n = float(value)
-        if n >= 1024:
-            return f"{n / 1024:.1f} GB"
-        return f"{n:,.0f} MB"
+    except (TypeError, ValueError):
+        return str(value)
+    absn = abs(n)
+    if absn >= 1_000_000:
+        text = f"{n / 1_000_000:.2f}".rstrip("0").rstrip(".")
+        return f"{text}M"
+    if absn >= 1_000:
+        text = f"{n / 1_000:.1f}".rstrip("0").rstrip(".")
+        return f"{text}k"
+    return f"{n:,.0f}"
 
-    text = one(mb)
+
+def stacked_lines(lines: list[str]) -> str:
+    if not lines:
+        return "—"
+    return lines[0] + "".join(f'<div class="muted">{line}</div>' for line in lines[1:])
+
+
+def _fmt_rss(mb) -> str:
+    n = float(mb)
+    if n >= 1024:
+        return f"{n / 1024:.1f} GB"
+    return f"{n:,.0f} MB"
+
+
+def fmt_ram(mb, peak_mb=None) -> str:
+    if mb in (None, "") and peak_mb in (None, ""):
+        return "—"
+    lines = []
     if peak_mb not in (None, ""):
-        text += f" (peak {one(peak_mb)})"
-    return text
+        lines.append(f"{_fmt_rss(peak_mb)} peak")
+        if mb not in (None, ""):
+            lines.append(_fmt_rss(mb))
+    elif mb not in (None, ""):
+        lines.append(_fmt_rss(mb))
+    return stacked_lines(lines)
 
 
 def fmt_duration(seconds: float | None) -> str:
@@ -281,7 +353,7 @@ def pct_cell(job: dict) -> str:
     target = job["target"]
     if target and steps is not None and steps > target:
         extra = steps - target
-        return f"100%<div class='muted'>+{extra:,} overshoot</div>"
+        return f"100%<div class='muted'>+{fmt_compact(extra)} overshoot</div>"
     return f"{pct:.1f}%"
 
 
@@ -311,9 +383,70 @@ def time_cell(job: dict, now: datetime) -> str:
             eta_at = now + timedelta(seconds=remaining)
             lines.append(f"ETA {fmt_clock(eta_at, now)} ({fmt_duration(remaining)})")
 
-    if not lines:
+    return stacked_lines(lines)
+
+
+def job_tooltip(job: dict) -> str:
+    args = " ".join(str(a) for a in (job.get("args") or []))
+    if args:
+        return f"{job['file']}\n{args}"
+    return job["file"]
+
+
+def with_tip(inner: str, tip: str) -> str:
+    if not tip:
+        return inner
+    return f'<div class="tip" data-tip="{html.escape(tip).replace(chr(10), "&#10;")}">{inner}</div>'
+
+
+def job_cell(job: dict) -> str:
+    return (
+        f'<strong>{html.escape(job["name"])}</strong>'
+        f'<div class="muted">{job["num_envs"]} envs · ~{job["ep_hours"]:.1f}h ep</div>'
+        f'<div class="muted">n_steps {fmt(job["n_steps"])}</div>'
+    )
+
+
+def steps_cell(job: dict) -> str:
+    perf = job["perf"] or {}
+    steps = _as_int(perf.get("steps"))
+    target = job["target"]
+    compact = f"{fmt_compact(steps)} / {fmt_compact(target)}"
+    inner = compact
+    if job.get("planned_updates") is not None or job.get("updates") is not None:
+        inner += (
+            f'<div class="muted">{fmt(job.get("updates"))} / '
+            f'{fmt(job.get("planned_updates"))} updates</div>'
+        )
+    return inner
+
+
+def steps_title(job: dict) -> str:
+    perf = job["perf"] or {}
+    return f"{fmt(_as_int(perf.get('steps')))} / {fmt(job['target'])}"
+
+
+def speedup_cell(job: dict) -> str:
+    value = (job.get("perf") or {}).get("speedup")
+    if value in (None, ""):
         return "—"
-    return lines[0] + "".join(f'<div class="muted">{line}</div>' for line in lines[1:])
+    return f"{fmt(value, 1)}x"
+
+
+def ram_cell(job: dict) -> str:
+    perf = job.get("perf") or {}
+    ram = fmt_ram(perf.get("fp"), job.get("peak_fp"))
+    cpu = perf.get("cpu")
+    if ram == "—" and cpu in (None, ""):
+        return "—"
+    extra = []
+    if perf.get("fp") not in (None, "") and perf.get("rss") not in (None, ""):
+        extra.append(f"residente {_fmt_rss(perf['rss'])}")
+    if cpu not in (None, ""):
+        extra.append(f"cpu {fmt(cpu)}%")
+    if ram == "—":
+        return stacked_lines(extra)
+    return ram + "".join(f'<div class="muted">{line}</div>' for line in extra)
 
 
 def sps_ymax(jobs: list[dict]) -> float:
@@ -353,14 +486,14 @@ def render(jobs: list[dict]) -> str:
         cards.append(
             f"""
             <tr class="state-{job['state']}">
-              <td><strong>{html.escape(job['name'])}</strong><div class="muted">{html.escape(job['file'])}</div></td>
+              <td>{with_tip(job_cell(job), job_tooltip(job))}</td>
               <td><span class="pill">{html.escape(job['state'])}</span></td>
               <td>{pct_cell(job)}</td>
-              <td>{fmt(perf.get('steps'))} / {fmt(job['target'])}</td>
+              <td>{with_tip(steps_cell(job), steps_title(job))}</td>
               <td>{fmt(perf.get('avg_sps'))}{f'<div class="muted">~{fmt(last_ma)} ma</div>' if last_ma is not None else ''}</td>
               <td>{time_cell(job, now)}</td>
-              <td>{fmt_ram(perf.get('rss'), job.get('peak_rss'))}{f'<div class="muted">cpu {fmt(perf.get("cpu"))}%</div>' if perf.get('cpu') not in (None, '') else ''}</td>
-              <td>{fmt(perf.get('speedup'), 1)}x</td>
+              <td>{ram_cell(job)}</td>
+              <td>{speedup_cell(job)}</td>
               <td class="chart">{sps_svg}<div class="muted">{caption}</div></td>
             </tr>"""
         )
@@ -379,6 +512,17 @@ def render(jobs: list[dict]) -> str:
     table {{ border-collapse: collapse; width: 100%; margin-top: 16px; }}
     th, td {{ text-align: left; padding: 8px 10px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }}
     th {{ font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #556; }}
+    .tip {{ cursor: help; }}
+    .tip-box {{
+      display: none; position: fixed; z-index: 50;
+      max-width: min(28rem, calc(100vw - 16px));
+      padding: 6px 8px; border-radius: 6px;
+      background: #111827; color: #f9fafb;
+      font-size: 12px; line-height: 1.4;
+      white-space: pre-wrap; overflow-wrap: anywhere;
+      pointer-events: none;
+      box-shadow: 0 8px 24px rgba(0,0,0,.18);
+    }}
     .pill {{ padding: 2px 8px; border-radius: 999px; background: #e5e7eb; font-size: 12px; }}
     .state-running .pill {{ background: #dbeafe; color: #1e40af; }}
     .state-done .pill {{ background: #dcfce7; color: #166534; }}
@@ -400,6 +544,34 @@ def render(jobs: list[dict]) -> str:
       {body}
     </tbody>
   </table>
+  <div class="tip-box" id="tip-box"></div>
+  <script>
+    (function () {{
+      const box = document.getElementById('tip-box');
+      let current = null;
+      function hide() {{
+        box.style.display = 'none';
+        current = null;
+      }}
+      document.addEventListener('mouseover', function (e) {{
+        const el = e.target.closest('[data-tip]');
+        if (el === current) return;
+        if (!el) {{ hide(); return; }}
+        current = el;
+        box.textContent = el.getAttribute('data-tip') || '';
+        box.style.display = 'block';
+        const r = el.getBoundingClientRect();
+        let left = r.left;
+        let top = r.bottom + 6;
+        const w = box.offsetWidth;
+        const h = box.offsetHeight;
+        if (left + w > innerWidth - 8) left = innerWidth - w - 8;
+        if (top + h > innerHeight - 8) top = r.top - h - 6;
+        box.style.left = Math.max(8, left) + 'px';
+        box.style.top = Math.max(8, top) + 'px';
+      }});
+    }})();
+  </script>
 </body>
 </html>
 """

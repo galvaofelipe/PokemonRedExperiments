@@ -49,6 +49,18 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Watch a PPO checkpoint play in a window.")
     parser.add_argument("--session-path", default="runs", help="Folder to pick the newest poke_*.zip from.")
     parser.add_argument("--checkpoint", default="", help="Zip path, or path without .zip. Overrides --session-path.")
+    parser.add_argument(
+        "--speed",
+        type=int,
+        default=0,
+        help="PyBoy speed multiplier (realtime=1). 0 = unlimited. Env default is 6, which still sleeps.",
+    )
+    parser.add_argument(
+        "--debug",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Print a one-line progress ticker from agent_stats (default on).",
+    )
     args = parser.parse_args()
 
     sess_path = Path(f'session_{str(uuid.uuid4())[:8]}')
@@ -58,7 +70,7 @@ if __name__ == '__main__':
                 'headless': False, 'save_final_state': True, 'early_stop': False,
                 'action_freq': 24, 'init_state': '../init.state', 'max_steps': ep_length, 
                 'print_rewards': True, 'save_video': False, 'fast_video': True, 'session_path': sess_path,
-                'gb_path': '../PokemonRed.gb', 'debug': False, 'sim_frame_dist': 2_000_000.0, 'extra_buttons': False
+                'gb_path': '../PokemonRed.gb', 'debug': args.debug, 'sim_frame_dist': 2_000_000.0, 'extra_buttons': False
             }
     
     num_cpu = 1 #64 #46  # Also sets the number of episodes per training iteration
@@ -80,6 +92,10 @@ if __name__ == '__main__':
         
     #keyboard.on_press_key("M", toggle_agent)
     obs, info = env.reset()
+    # Env sets 6x on windowed PyBoy; that still time.sleeps. Re-apply after
+    # reset so a watch run can uncap (0) or pick another multiplier.
+    env.pyboy.set_emulation_speed(args.speed)
+    print(f"emulation speed: {'unlimited' if args.speed == 0 else f'{args.speed}x'} (hold Space in the window to turbo)")
     while True:
         try:
             with open("agent_enabled.txt", "r") as f:
