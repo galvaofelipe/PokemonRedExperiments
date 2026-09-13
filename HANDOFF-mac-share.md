@@ -39,13 +39,14 @@ $POKERED_DATA/pokered/
 Copy, don't move. Write once; don't edit in place:
 
 ```
-$POKERED_DATA/pokered/runs/v2/<run_name>/
+$POKERED_DATA/pokered/runs/v2/<run_name>/   # <run_name> = backup name (e.g. t16_g20480_s0)
   poke_*_steps.zip                     # checkpoints
   resource_summary.txt, resource_log.csv
   run.json                             # backup_run() metadata (cli args, seed, host, timesteps)
 ```
 
-Skip tfevents, videos, and per-episode `.state` dumps — mirror what
+Canonical source: `v2/baselines/<run_name>/` (the `--backup` output) — rsync it
+verbatim. Skip tfevents, videos, and per-episode `.state` dumps — mirror what
 `backup_run()` (`v2/baseline_fast_v2.py`) already skips. Small coordination files
 (job specs, ledgers, perf manifests) stay in git, not on the share.
 
@@ -58,11 +59,13 @@ Skip tfevents, videos, and per-episode `.state` dumps — mirror what
 
 Known sharp edges:
 
-- **Jobs 023/024** (`v2/jobs/`) resume from `runs_t05_*/poke_1966080_steps`.
-  RESOLVED 2026-09-13: `runs_t05_g2560_s0` + `runs_t05_g20480_s0` are published
-  to `pokered/runs/v2/` (checkpoints + resource logs + synthesized run.json).
-  AM18: copy the zips into local `v2/` before `./run_queue.sh`. (Ticket 19
-  tracks making this class of reference portable.)
+- **Jobs 022/023/024** resume from `runs_t05_*/runs_t15_*/poke_1966080_steps`.
+  RESOLVED 2026-09-13: published to `pokered/runs/v2/` under backup names —
+  `t05_g2560_s0`, `t05_g20480_s0`, `t15_acc64_s0` (parents) and `t16_acc64_s0`,
+  `t16_g20480_s0` (tonight's finished runs). `t16_g2560_s0` still running on the
+  Mac — publish from `v2/baselines/t16_g2560_s0/` once done. Consumer: copy the
+  needed zip into local `v2/runs_*/` before `./run_queue.sh`. (Ticket 19 tracks
+  making this class of reference portable.)
 - **Telemetry columns are NOT cross-platform comparable**: Mac = phys_footprint +
   lifetime cpu_pct; Linux = PSS footprint + interval cpu_pct. Compare SPS across
   machines; size RAM per machine via `docs/perf/<host>.md`.
