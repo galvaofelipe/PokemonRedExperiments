@@ -270,7 +270,7 @@ def test_scorecard_splits_integration():
     )
 
     assert card["scorecard_version"] == SCORECARD_VERSION
-    assert card["scorecard_version"] == "1.1.0"
+    assert card["scorecard_version"] == "1.2.0"
     assert card["splits"]["splits_version"] == SPLITS_VERSION
     assert len(card["splits"]["order"]) == 16
     assert card["splits"]["achieved"][0]["name"] == "Brock"
