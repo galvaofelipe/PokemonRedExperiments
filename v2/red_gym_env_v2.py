@@ -19,11 +19,41 @@ event_flags_start = 0xD747
 event_flags_end = 0xD87E # expand for SS Anne # old - 0xD7F6 
 museum_ticket = (0xD754, 0)
 
+PROGRESS_PRINT_N = 64
+
+
+def should_print_progress(last, current, n=PROGRESS_PRINT_N):
+    if last is None:
+        return True
+    if current["step"] - last["step"] >= n:
+        return True
+    return (
+        current["map"] != last["map"]
+        or current["badge"] != last["badge"]
+        or current["max_map_progress"] != last["max_map_progress"]
+    )
+
+
+def format_progress_line(stats):
+    return (
+        f"step: {stats['step']} "
+        f"map: {stats['map']} "
+        f"mmp: {stats['max_map_progress']} "
+        f"unique_maps: {stats['unique_maps']} "
+        f"badge: {stats['badge']} "
+        f"event: {stats['event']} "
+        f"dex_seen: {stats['dex_seen']} "
+        f"levels_sum: {stats['levels_sum']}"
+    )
+
+
 class RedGymEnv(Env):
     def __init__(self, config=None):
         self.s_path = config["session_path"]
         self.save_final_state = config["save_final_state"]
         self.print_rewards = config["print_rewards"]
+        self.debug = config.get("debug", False)
+        self._last_progress_print = None
         self.headless = config["headless"]
         self.init_state = config["init_state"]
         self.act_freq = config["action_freq"]
@@ -135,6 +165,7 @@ class RedGymEnv(Env):
         self.init_map_mem()
 
         self.agent_stats = []
+        self._last_progress_print = None
 
         self.explore_map_dim = GLOBAL_MAP_SHAPE
         self.explore_map = np.zeros(self.explore_map_dim, dtype=np.uint8)
@@ -220,6 +251,7 @@ class RedGymEnv(Env):
         self.run_action_on_emulator(action)
         self.update_map_progress()
         self.append_agent_stats(action)
+        self.maybe_print_progress()
 
         self.update_recent_actions(action)
 
@@ -322,6 +354,22 @@ class RedGymEnv(Env):
                 "healr": self.total_healing_rew,
             }
         )
+
+    def maybe_print_progress(self):
+        if not self.debug or not self.agent_stats:
+            return
+        current = self.agent_stats[-1]
+        if not should_print_progress(
+            self._last_progress_print, current, n=PROGRESS_PRINT_N
+        ):
+            return
+        print(f"\r{format_progress_line(current)}", end="", flush=True)
+        self._last_progress_print = {
+            "step": current["step"],
+            "map": current["map"],
+            "badge": current["badge"],
+            "max_map_progress": current["max_map_progress"],
+        }
 
     def start_video(self):
 
@@ -442,6 +490,9 @@ class RedGymEnv(Env):
             self.read_hp_fraction() * 2000,
             prog["explore"] * 150 / (self.explore_weight * self.reward_scale),
         )
+
+    def get_latest_stats(self):
+        return self.agent_stats[-1] if self.agent_stats else {}
 
     def check_if_done(self):
         step_limit = self.step_count >= self.max_steps - 1
