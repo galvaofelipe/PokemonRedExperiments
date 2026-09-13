@@ -40,7 +40,11 @@ V2 is now recommended over the original version. You may follow all steps below 
 3. Install dependencies:  
 ```pip install -r requirements.txt```  
 It may be necessary in some cases to separately install the SDL libraries.
-For V2 MacOS users should use ```macos_requirements.txt``` instead of ```requirements.txt```
+The torch pin is satisfied by any build of 2.5.0. Platform notes:
+- **Apple Silicon (Metal):** the standard PyPI wheel already ships MPS support — install as above. (v2 training runs on CPU by default regardless; the policy is small enough that MPS is not worth the op-coverage edge cases.)
+- **Linux without an NVIDIA GPU** (e.g. the AM18 / Radeon iGPU): install the CPU build first so pip does not pull ~4GB of CUDA wheels:  
+  ```pip install torch==2.5.0 --index-url https://download.pytorch.org/whl/cpu``` then ```pip install -r requirements.txt```
+- **Linux with an NVIDIA GPU:** plain install works; the CUDA wheels are pulled in transitively.
 4. Run:  
 ```python run_pretrained_interactive.py```
   

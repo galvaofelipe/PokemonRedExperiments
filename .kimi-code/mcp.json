@@ -1,5 +1,13 @@
 {
   "mcpServers": {
+    "codegraph": {
+      "command": "codegraph",
+      "args": ["serve", "--mcp"]
+    },
+    "github": {
+      "url": "https://api.githubcopilot.com/mcp/",
+      "bearerTokenEnvVar": "GITHUB_PERSONAL_ACCESS_TOKEN"
+    },
     "prometheus-tower": {
       "command": "docker",
       "args": [

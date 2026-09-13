@@ -6,7 +6,7 @@ The codegraph MCP (local index in `.codegraph/`, untracked) is available to agen
 
 ## Tracked agent/docs paths
 
-`.scratch/`, `docs/`, `AGENTS.md`, `CONTEXT.md`, `INBOX.md`, and `.kimi-code/` are tracked in git (shared across machines). Run data (`v2/baselines/`, `v2/logs/`, `v3/runs/`, `runs_*/`, etc.) stays gitignored. `.kimi-code/mcp.json` holds no secrets — the Grafana token is passed via the `GRAFANA_SERVICE_ACCOUNT_TOKEN` shell env var.
+`.scratch/`, `docs/`, `AGENTS.md`, `CONTEXT.md`, `INBOX.md`, and `.kimi-code/` are tracked in git (shared across machines). Run data (`v2/baselines/`, `v2/logs/`, `v3/runs/`, `runs_*/`, etc.) stays gitignored. `.kimi-code/mcp.json` holds no secrets — tokens are passed via shell env vars (`GRAFANA_SERVICE_ACCOUNT_TOKEN` for Grafana, `GITHUB_PERSONAL_ACCESS_TOKEN` for the GitHub MCP).
 
 ## Agent skills
 
