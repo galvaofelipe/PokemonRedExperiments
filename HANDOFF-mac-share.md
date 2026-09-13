@@ -58,10 +58,11 @@ Skip tfevents, videos, and per-episode `.state` dumps — mirror what
 
 Known sharp edges:
 
-- **Jobs 023/024** (`v2/jobs/`) resume from `runs_t05_*/poke_1966080_steps`, which
-  exist only on the Mac until published. Mac: publish `runs_t05_g2560_s0` +
-  `runs_t05_g20480_s0` to `pokered/runs/v2/`. AM18: copy the zips into local `v2/`
-  before `./run_queue.sh`. (Ticket 19 tracks making this class of reference portable.)
+- **Jobs 023/024** (`v2/jobs/`) resume from `runs_t05_*/poke_1966080_steps`.
+  RESOLVED 2026-09-13: `runs_t05_g2560_s0` + `runs_t05_g20480_s0` are published
+  to `pokered/runs/v2/` (checkpoints + resource logs + synthesized run.json).
+  AM18: copy the zips into local `v2/` before `./run_queue.sh`. (Ticket 19
+  tracks making this class of reference portable.)
 - **Telemetry columns are NOT cross-platform comparable**: Mac = phys_footprint +
   lifetime cpu_pct; Linux = PSS footprint + interval cpu_pct. Compare SPS across
   machines; size RAM per machine via `docs/perf/<host>.md`.
