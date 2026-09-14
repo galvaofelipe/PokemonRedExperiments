@@ -1,0 +1,25 @@
+{
+  "name": "t25_acc64_dexballs_s0_35m",
+  "args": [
+    "--num-envs",
+    "64",
+    "--physical-envs",
+    "16",
+    "--n-steps",
+    "2560",
+    "--max-steps",
+    "16384",
+    "--total-timesteps",
+    "35061760",
+    "--init-state",
+    "../has_pokedex_nballs.state",
+    "--seed",
+    "0",
+    "--no-stream",
+    "--save-final-state",
+    "--session-path",
+    "runs_t25_acc64_dexballs_s0",
+    "--backup",
+    "t25_acc64_dexballs_s0"
+  ]
+}
