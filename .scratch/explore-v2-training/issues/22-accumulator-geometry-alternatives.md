@@ -2,7 +2,7 @@
 
 Type: research
 Status: open
-Blocked by: 21
+Blocked by: — (21 resolvido 2026-09-14)
 
 ## Question
 
