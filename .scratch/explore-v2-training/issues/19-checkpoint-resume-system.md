@@ -4,7 +4,87 @@ Type: task
 Status: ready-for-agent
 Blocked by: —
 
-## Question
+## Desenho congelado (2026-09-14, grill com operador)
+
+Decisões travadas em sessão de grill; os termos **Lineage / Leg / Branch /
+Lineage ledger** já estão no CONTEXT.md. ADR sai só no final (sem ajustes
+pendentes), escopo restrito à v2. **Esta seção é a spec de implementação** — o
+restante do ticket é contexto histórico.
+
+1. **Linhagem = um dir de sessão = uma curva TB.** Todas as pernas escrevem no
+   dir de nascimento da linhagem (o modo `--target-steps` já garante numeração
+   contínua de checkpoints e TB no dir novo — `v2/baseline_fast_v2.py:353-374`).
+   Fixos na linhagem: reward, env_config, geometria lógica (streams × n_steps).
+   Physical envs é da máquina — resolução: `--physical-envs` explícito >
+   `V2_PHYSICAL_ENVS` > default-por-host (mapa no código: AM18→16, mac-mini→8).
+   Mudança além de step-budget/máquina = branch (fora de escopo aqui; basta o
+   sidecar/ledger terem campo `parent` pra quando acontecer).
+2. **Sidecar por checkpoint**: `poke_<N>_steps.json` ao lado de cada zip —
+   lineage, global_step (absoluto da linhagem), geometria lógica (num_envs
+   lógico, n_steps, accumulation_rounds), seed, env_config, parent
+   (lineage+step ou null), hostname, saved_at. Escrito no save; publicado junto
+   ao zip.
+3. **Extend**: `--extend <linhagem> [--from-step N] --target-steps <abs>` no
+   `baseline_fast_v2.py`:
+   - resolve o checkpoint no dir local da linhagem; se ausente/incompleto,
+     busca em `$POKERED_DATA/pokered/runs/v2/<linhagem>/` e copia zip+sidecar+
+     tfevents pro dir local (convenção de consume do HANDOFF-mac-share.md);
+   - seleção: maior sidecar ≤ from-step (default: o mais recente);
+   - **hard-fail** se nada resolver — aposenta o silent-fresh-start de
+     `baseline_fast_v2.py:338-339`;
+   - relógio global vem do sidecar (`--base-steps` vira deprecated warning);
+   - geometria lógica/seed/env_config vêm do sidecar; flag explícita
+     contraditória = erro claro (silêncio já mordeu);
+   - TB apontado pro dir da linhagem; fixups do acumulador (hoje manuais em
+     `:327-336`) aplicados automaticamente a partir do sidecar.
+4. **Lineage ledger**: `v2/lineage.jsonl` (git, append-only), uma linha JSON por
+   run: run/job name, lineage, parent (lineage+step ou null), target_steps,
+   seed, hostname, start/end, status. Escrito pelo runner — inclusive em run do
+   zero (parent null).
+5. **Fila inalterada**: specs `{name, args[]}` declarativos. Campanha t16 s0
+   19M→27M→35M = 9 specs numerados 030–038, gerados como parte da entrega mas
+   NÃO enfileirados.
+6. **Publish sob demanda**: `v2/publish_run.sh <linhagem>` copia zips+sidecars+
+   tfevents (+ resource_summary/log, run.json) pro share; vídeos/states fora.
+   Nada de rede no caminho do treino.
+7. **Migração one-time = FORA DE ESCOPO desta implementação** (passo separado,
+   só após ok do operador): consolidação dos dirs t05/t15+t16, backfill de
+   sidecars legacy, remoção do `--base-steps`, arquivamento do tb_stitch.
+8. **Aposentados nesta entrega**: silent-fresh-start; `--resume` por mtime e
+   `--base-steps` marcados deprecated (warning); offset manual no tb_extract
+   (documentar como desnecessário daqui pra frente).
+
+### Notas de implementação (fatos verificados no código)
+
+- Resume path `v2/baseline_fast_v2.py:280-374`; seleção de checkpoint
+  `:147-164`; escolha PPO vs AccumulatingPPO `:325`; backup_run `:176-214`
+  (run.json: cli_args/seed/start/end/num_timesteps/hostname/completed).
+- `run_queue.sh`: glob `jobs/*.json`, ordem LC_ALL=C, cwd=`v2/`,
+  stdin=/dev/null, exit≠0 → `jobs/failed/` e segue a fila.
+- SB3 2.3.2: sem truncamento de budget (overshoot de até 1 mega-update);
+  CheckpointCallback nomeia por `model.num_timesteps`; `tensorboard_log` é
+  persistido no zip (por isso `:371` reatribui no modo target-steps).
+- Mesmo session-path em pernas sequenciais é seguro no modo relógio-global;
+  resource_log.csv appenda, resource_summary.txt é sobrescrito (aceitável),
+  histogram x-axis reinicia por processo (aceitável neste escopo).
+- Nada em `v2/` conhece o share hoje; `POKERED_DATA` vem de
+  `scripts/ensure_tower.sh`.
+
+### Critério de aceite (supersede o da seção Question)
+
+1. Prova em run descartável: leg1 curta + leg2 via `--extend` → TB contínuo
+   0→total no dir da linhagem, sem stitch/offset; sidecars corretos; ledger com
+   2 linhas; checkpoints na numeração global.
+2. Extend com checkpoint presente só no share → copia zip+sidecar+tfevents e
+   roda.
+3. Extend sem checkpoint resolvível → hard-fail imediato, exit≠0.
+4. Flag contraditória com o sidecar (ex.: `--n-steps` diverso) → erro claro.
+5. Testes automatizados do que der (resolução/seleção/parse) seguindo
+   `v2/tests/`; os testes NÃO tocam os dirs das runs de 11M.
+6. 9 specs da campanha (030–038) gerados em `v2/jobs/` e validados pelo parser
+   real de `baseline_fast_v2.py`.
+
+## Question (contexto histórico)
 
 Continuar uma run hoje depende de gambiarras que já morderam e vão morder de novo
 (quanto mais máquinas e runs paralelas, pior):

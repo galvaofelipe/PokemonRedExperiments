@@ -32,6 +32,19 @@ challenge any usage that drifts from these meanings.
 
 ## Run taxonomy
 
+- **Lineage** — a run and all its continuations under one identity: one
+  TensorBoard curve and one run directory, extended leg after leg. Fixed within
+  a lineage: training reward, env config, and logical geometry (streams ×
+  n_steps); physical env count is a machine property and may differ between legs.
+- **Leg** (perna) — one continuation segment of a lineage: same identity, larger
+  step budget, possibly another machine. Changing anything beyond the step budget
+  and the machine is not a leg.
+- **Branch** — a new lineage forked from a checkpoint of a parent lineage (e.g. a
+  different reward or logical geometry from that point on); the parent checkpoint
+  is recorded in the lineage ledger.
+- **Lineage ledger** — the append-only, runner-written record mapping each run to
+  the checkpoint it resumed from. Provenance, not results — distinct from the
+  **Ledger** (experiment outcomes and keep/discard).
 - **Cadence run** — a short, fixed-budget train+eval experiment used for day-to-day
   iteration. Results are comparable only to other Cadence runs of the same budget.
 - **Marathon** — a long (weekend-scale) run warm-started from the Champion, used to

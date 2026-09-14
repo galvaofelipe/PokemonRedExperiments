@@ -77,3 +77,22 @@ results, recommended production geometries, headroom warnings, validation caveat
 Consult it before sizing any run for that machine; update it after bench sessions or
 config changes (`.wslconfig`, torch version, etc.). Current: `docs/perf/am18.md`
 (mac-mini pending).
+
+## Publicando as legs t16 s1/s2 (instrução pro agente no Mac, 2026-09-14)
+
+As runs da fase 2 (jobs 024–029, s1/s2, terminam ~17h) já saem com **relógio
+global** — NÃO rodar `tb_stitch.py`, NÃO aplicar offset na extração. Quando cada
+uma terminar:
+
+1. Publica o dir da leg2 em `pokered/runs/v2/t16_<braço>_s<seed>/` como sempre
+   (zips, `resource_summary.txt`, `resource_log.csv`, `run.json`) **+ os tfevents
+   desta vez** — mudança de convenção: sob o desenho congelado do ticket 19 a
+   curva TB viaja com a linhagem (tfevents de scalars são pequenos; vídeos e
+   states por-episódio continuam fora).
+2. Publica também os tfevents da leg1 correspondente (`runs_t15_acc64_s<seed>`
+   ou `runs_t05_<braço>_s<seed>`) no dir da linhagem de origem no share.
+3. NÃO consolidar leg1+leg2 num dir único no Mac — a consolidação é passo da
+   migração no AM18 e só acontece depois do mecanismo novo ser validado
+   (ticket 19). Deixa os dirs como estão.
+4. `git pull -r` antes de mexer em qualquer doc — o desenho congelado está no
+   ticket 19 e no CONTEXT.md desde 2026-09-14.
