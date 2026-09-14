@@ -209,3 +209,21 @@ Evidência de teste (AM18, `.venv` py3.12):
   → warning de depreciação. Artefatos grandes do scratch limpos (sidecars,
   tfevents e summaries mantidos em `v2/runs_scratch_lg19/`).
 
+
+**2026-09-14 — implementação verificada + migração one-time executada (AM18).**
+Mecanismo implementado (commit 2311dc2): `v2/lineage.py`, `--extend/--from-step`,
+sidecars em todo save, ledger, `publish_run.sh`, specs 030–038. Verificação
+independente: 17 testes passando; E2E com TB contínuo na fronteira da perna.
+Migração (item 7): `.scratch/explore-v2-training/scripts/migrate_legacy_sidecars.py`
+(idempotente, manifest cobre s0–s2) escreveu os sidecars direto no share — leg1
+(global = zip step, parent null) e t16 s0 (offset +1.966.080).
+**Correção de fato importante:** o maior zip das legs t16 é 8.978.432 leg-local =
+**10.944.512 global** (a run terminou em 9.011.200 sem save final) — a campanha
+030–038 resume de 10.944.512, não de 10.977.280. Os sidecars staged errados
+(10.977.280, zip inexistente) foram removidos do git; os corretos vivem no share.
+`resolve_extend` verificado end-to-end contra o share real (seleciona 10.944.512,
+copia zip+sidecar). Pendências: tfevents (share zerado — Mac publica s0 stitchados
++ s1/s2 + leg1s, ver HANDOFF-mac-share.md); re-rodar o script após o publish de
+s1/s2; duplicatas `runs_t05_*` no share (operador decide se apaga); tb_stitch.py
+arquivado em `.scratch` (histórico). ADR: `docs/adr/0001`. Aceite final = fila
+030–038 verde no AM18.

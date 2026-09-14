@@ -107,5 +107,11 @@ uma terminar:
 3. NÃO consolidar leg1+leg2 num dir único no Mac — a consolidação é passo da
    migração no AM18 e só acontece depois do mecanismo novo ser validado
    (ticket 19). Deixa os dirs como estão.
-4. `git pull -r` antes de mexer em qualquer doc — o desenho congelado está no
-   ticket 19 e no CONTEXT.md desde 2026-09-14.
+4. Publica também os tfevents das runs **t16 s0** (`runs_t16_*_s0/poke_ppo_1` +
+   `histogram/`) nos dirs `t16_*_s0` do share — a curva stitchada 0→11M só
+   existe no Mac; o share está com zero tfevents hoje (verificado 2026-09-14).
+5. Depois de publicar as s1/s2, roda o backfill de sidecars delas (idempotente,
+   manifest já cobre s1/s2):
+   `python3 .scratch/explore-v2-training/scripts/migrate_legacy_sidecars.py $POKERED_DATA/pokered/runs/v2 --apply`
+6. `git pull -r` antes de mexer em qualquer doc — o desenho congelado está no
+   ticket 19, no CONTEXT.md e no ADR `docs/adr/0001` desde 2026-09-14.
