@@ -126,7 +126,8 @@ Score in the Ledger is comparable.
   set, minus the museum-ticket bit. Money excluded (farmable). Formula versioned.
 - **D6. Eval suite v1.** The two usable states already on disk (fresh game,
   early-progression), 3 seeds each, 16,384-step cap, δ = 2.0. Suite is versioned
-  data, expanded as the human captures milestone states. => /dev/pokemonred_puffer/pyboy_states
+  data, expanded as the human captures milestone states. => `pyboy_states/`
+  (in-repo inventory; root `*.state` early-game files remain for training paths)
 - **D7. Telemetry.** Per env per episode, gzipped, per decision step:
   step, x, y, map id, badges, event count, dex seen/caught, level sum — plus the
   in-game play clock (see D16) so split times are hardware-independent. Same

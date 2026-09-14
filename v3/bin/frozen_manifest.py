@@ -4,7 +4,8 @@
 Protected scope (membership via filesystem walk):
   - Every file under v3/frozen/ on disk (excluding __pycache__ trees)
   - init.state, fast_text_start.state, has_pokedex.state, has_pokedex_nballs.state
-    at the repo root
+    at the repo root (stable paths training jobs already use)
+  - Every file under pyboy_states/ on disk (expanded save-state inventory)
 
 Committed manifest: v3/frozen_manifest.sha256 (shasum -a 256 format, two spaces
 between hex digest and repo-relative path, sorted by path). Verify by hand:
@@ -32,6 +33,7 @@ from typing import Iterable
 
 MANIFEST_REL = "v3/frozen_manifest.sha256"
 FROZEN_PREFIX = "v3/frozen/"
+PYBOY_STATES_PREFIX = "pyboy_states/"
 ROOT_STATE_FILES = (
     "init.state",
     "fast_text_start.state",
@@ -84,29 +86,38 @@ def is_protected_path(path: str) -> bool:
         return True
     if normalized in ROOT_STATE_FILES:
         return True
-    return normalized.startswith(FROZEN_PREFIX)
+    if normalized.startswith(FROZEN_PREFIX):
+        return True
+    if normalized == PYBOY_STATES_PREFIX.rstrip("/") or normalized.startswith(
+        PYBOY_STATES_PREFIX
+    ):
+        return True
+    return False
+
+
+def _walk_protected_tree(repo_root: Path, rel_dir: str) -> list[str]:
+    root = repo_root / rel_dir
+    if not root.is_dir():
+        return []
+    paths: list[str] = []
+    for file_path in sorted(root.rglob("*")):
+        if not file_path.is_file():
+            continue
+        if "__pycache__" in file_path.parts:
+            continue
+        paths.append(file_path.relative_to(repo_root).as_posix())
+    return paths
 
 
 def protected_paths(repo_root: Path) -> list[str]:
     """Enumerate protected files via filesystem walk (not git ls-files)."""
     repo_root = Path(repo_root)
-    paths: list[str] = []
-
-    frozen_dir = repo_root / "v3" / "frozen"
-    if frozen_dir.is_dir():
-        for file_path in sorted(frozen_dir.rglob("*")):
-            if not file_path.is_file():
-                continue
-            if "__pycache__" in file_path.parts:
-                continue
-            rel = file_path.relative_to(repo_root).as_posix()
-            paths.append(rel)
-
+    paths = _walk_protected_tree(repo_root, FROZEN_PREFIX.rstrip("/"))
+    paths.extend(_walk_protected_tree(repo_root, PYBOY_STATES_PREFIX.rstrip("/")))
     for name in ROOT_STATE_FILES:
         state_path = repo_root / name
         if state_path.is_file():
             paths.append(name)
-
     return sorted(set(paths))
 
 
@@ -209,7 +220,12 @@ def _porcelain_paths(repo_root: Path, path_args: list[str]) -> list[str]:
 def dirty_protected_paths(repo_root: Path) -> list[str]:
     """Tracked changes under protected scope (for rehash guard)."""
     repo_root = Path(repo_root)
-    scope_args = [FROZEN_PREFIX.rstrip("/"), MANIFEST_REL, *ROOT_STATE_FILES]
+    scope_args = [
+        FROZEN_PREFIX.rstrip("/"),
+        PYBOY_STATES_PREFIX.rstrip("/"),
+        MANIFEST_REL,
+        *ROOT_STATE_FILES,
+    ]
     return sorted(set(_porcelain_paths(repo_root, scope_args)))
 
 

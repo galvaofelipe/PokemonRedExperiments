@@ -130,6 +130,11 @@ challenge any usage that drifts from these meanings.
 - **Reference baseline** — a fixed set of v2 runs (45-minute, 11M-step, 35M-step)
   preserved as the yardstick for what the pre-v3 stack achieved. v3 Scores are
   compared against Reference baselines for context, never for keep/discard.
+- **Save-state suite** — PyBoy `.state` files used as episode starts for training
+  and frozen eval. The four early-game files at the repo root (`init.state`,
+  `fast_text_start.state`, `has_pokedex.state`, `has_pokedex_nballs.state`) are the
+  stable paths jobs already use; `pyboy_states/` holds the same four plus later
+  milestone captures for suite expansion. Both are Frozen.
 
 ## Conversion rubric
 

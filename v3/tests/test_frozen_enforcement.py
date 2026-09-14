@@ -31,7 +31,7 @@ def _manifest_for(repo_root: Path) -> str:
 def test_verify_passes_clean_fixture(tmp_path):
     files = {
         "v3/frozen/foo.py": b"print('ok')\n",
-        "init.state": b"state-bytes",
+        "pyboy_states/init.state": b"state-bytes",
     }
     _write_fixture_tree(tmp_path, files)
     (tmp_path / frozen_manifest.MANIFEST_REL).write_text(_manifest_for(tmp_path))
@@ -46,7 +46,7 @@ def test_verify_passes_clean_fixture(tmp_path):
 def test_verify_tampered_file(tmp_path):
     files = {
         "v3/frozen/foo.py": b"original\n",
-        "init.state": b"state-bytes",
+        "pyboy_states/init.state": b"state-bytes",
     }
     _write_fixture_tree(tmp_path, files)
     (tmp_path / frozen_manifest.MANIFEST_REL).write_text(_manifest_for(tmp_path))
@@ -61,7 +61,7 @@ def test_verify_tampered_file(tmp_path):
 def test_verify_listed_but_missing(tmp_path):
     files = {
         "v3/frozen/foo.py": b"original\n",
-        "init.state": b"state-bytes",
+        "pyboy_states/init.state": b"state-bytes",
     }
     _write_fixture_tree(tmp_path, files)
     manifest = _manifest_for(tmp_path)
@@ -77,7 +77,7 @@ def test_verify_listed_but_missing(tmp_path):
 def test_verify_extra_unlisted_frozen_file(tmp_path):
     files = {
         "v3/frozen/foo.py": b"original\n",
-        "init.state": b"state-bytes",
+        "pyboy_states/init.state": b"state-bytes",
     }
     _write_fixture_tree(tmp_path, files)
     (tmp_path / frozen_manifest.MANIFEST_REL).write_text(_manifest_for(tmp_path))
@@ -122,6 +122,16 @@ def test_offending_staged_manifest():
     assert frozen_manifest.offending_staged_paths(["v3/frozen_manifest.sha256"]) == [
         "v3/frozen_manifest.sha256"
     ]
+
+
+def test_offending_staged_pyboy_states():
+    assert frozen_manifest.offending_staged_paths(["pyboy_states/init.state"]) == [
+        "pyboy_states/init.state"
+    ]
+
+
+def test_offending_staged_root_state():
+    assert frozen_manifest.offending_staged_paths(["init.state"]) == ["init.state"]
 
 
 def test_offending_staged_frozen_delete():
@@ -178,7 +188,7 @@ def test_run_pre_commit_allows_editable(tmp_path):
 def test_rehash_writes_manifest_on_clean_tree(tmp_path):
     files = {
         "v3/frozen/foo.py": b"content\n",
-        "init.state": b"state\n",
+        "pyboy_states/init.state": b"state\n",
     }
     _write_fixture_tree(tmp_path, files)
     with patch.object(rehash_frozen_manifest, "dirty_protected_paths", return_value=[]):
