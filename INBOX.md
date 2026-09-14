@@ -100,3 +100,14 @@ the same job.
       a badge), then run **b35m_2hep** and/or **b35m_esfaint** — same one
       factor, 35M budget. Do not marathon a recipe that already failed at
       11M.
+
+
+## Unraid
+- [ ] Subir um tensorboard no unraid pra inspecionar as runs na share. (talvez copiar tfevents pra share via filewatcher ou algo assim durante o run_queue.sh)
+
+
+## AM18 peformance analisys
+- [ ] analisar performance em diferentes geometrias (.scratch/explore-v2-training/issues/22-accumulator-geometry-alternatives.md)
+      - physical environments interest data points = 8, 12, 16, 20, 24, 28, 30
+      - logical environts to consider when searching for multiples = 40, 48, 60, 120, 140
+      - .scratch/explore-v2-training/issues/22-accumulator-geometry-alternatives.md

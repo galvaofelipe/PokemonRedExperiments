@@ -5,12 +5,17 @@ frozen (no gradient step between rounds), chains the R per-round rollout
 buffers into a single read-only view, and runs one PPO.train() per
 mega-update. GAE is computed natively per round, with the stock bootstrap at
 each round frontier, matching the author's (n_steps, 64) buffer semantics.
+
+Ticket 23: per-round buffers store obs in observation_space.dtype (uint8 for
+screens/map, 1-byte for events) and the previous mega-update chain is dropped
+immediately after train(), so it is not alive during the next collection.
 """
 
 from typing import Generator, List, Optional, Union
 
 import numpy as np
 import torch as th
+from gymnasium import spaces
 from stable_baselines3 import PPO
 from stable_baselines3.common.buffers import DictRolloutBuffer, RolloutBuffer
 from stable_baselines3.common.type_aliases import (
@@ -20,12 +25,17 @@ from stable_baselines3.common.type_aliases import (
 )
 from stable_baselines3.common.vec_env import VecEnv
 
+from native_dtype_rollout_buffer import NativeDtypeDictRolloutBuffer, obs_batch_to_torch
+
 
 class ChainedRolloutBuffer:
     """Read-only view chaining per-round rollout buffers along the time axis.
 
     Implements the minimal interface PPO.train() consumes: get(batch_size)
     and the values/returns arrays used for explained variance.
+
+    Obs stay in each round buffer at native dtype; uint8→float32 happens in
+    _samples when assembling the policy batch, not as a full-chain copy.
     """
 
     def __init__(self, buffers: List[RolloutBuffer], device: Union[th.device, str]):
@@ -78,7 +88,8 @@ class ChainedRolloutBuffer:
         )
         if self.is_dict:
             return DictRolloutBufferSamples(
-                {k: to_torch(v) for k, v in obs.items()}, *tuple(map(to_torch, rest))
+                {k: obs_batch_to_torch(v, self.device) for k, v in obs.items()},
+                *tuple(map(to_torch, rest)),
             )
         return RolloutBufferSamples(*tuple(map(to_torch, (obs,) + rest)))
 
@@ -104,6 +115,14 @@ class AccumulatingPPO(PPO):
         if accumulation_rounds < 1:
             raise ValueError(f"accumulation_rounds must be >= 1, got {accumulation_rounds}")
         self.accumulation_rounds = accumulation_rounds
+        # Stock DictRolloutBuffer hardcodes float32; swap in the dtype-honoring
+        # subclass unless the caller passed a custom rollout_buffer_class.
+        if (
+            isinstance(self.observation_space, spaces.Dict)
+            and self.rollout_buffer_class is DictRolloutBuffer
+        ):
+            self.rollout_buffer_class = NativeDtypeDictRolloutBuffer
+            self.rollout_buffer = self._new_round_buffer()
 
     def _new_round_buffer(self) -> RolloutBuffer:
         return self.rollout_buffer_class(
@@ -158,9 +177,17 @@ class AccumulatingPPO(PPO):
             iteration += 1
             self.rollout_buffer = ChainedRolloutBuffer(round_buffers, self.device)
             self._update_current_progress_remaining(self.num_timesteps, total_timesteps)
+            # _dump_logs reads ep_info_buffer / fps, not the chained rollout
+            # buffer. Keep it before train() (stock cadence) so freeing the
+            # chain after train cannot starve logging.
             if log_interval is not None and iteration % log_interval == 0:
                 self._dump_logs(iteration)
             self.train()
+            # Drop the mega-update chain (and the local round-buffer list)
+            # before the next collection starts. Previously the chain lived
+            # until the reassignment above on the following iteration.
+            self.rollout_buffer = None
+            round_buffers.clear()
 
         callback.on_training_end()
         return self
