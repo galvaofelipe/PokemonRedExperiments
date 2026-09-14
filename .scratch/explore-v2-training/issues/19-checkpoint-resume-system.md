@@ -147,3 +147,65 @@ concretas que este ticket aposenta:
 Com o relógio restaurado + sidecar de step absoluto, overshoot deixa de ser
 problema: o delta re-executado simplesmente sobrescreve/continua a numeração
 global e o TB sai contínuo sem cirurgia.
+
+**2026-09-14 — implementação entregue (agente, AM18; commit pendente de review
+do operador).** Itens 2, 3, 4, 5, 6 e 8 implementados; item 7 (migração)
+fora de escopo, como combinado.
+
+- `v2/lineage.py` (novo): sidecars (`write_sidecar`/`read_sidecars`), seleção
+  (maior sidecar ≤ from-step), resolução de extend com fallback pro share
+  (`resolve_extend` — copia zip+sidecar+tfevents pra baixo; hard-fail com
+  mensagem clara se nada resolve), checagem de contradição flag×sidecar,
+  `resolve_physical_cap` (flag > `V2_PHYSICAL_ENVS` > mapa de host
+  AM18/win-p2kh1a2oie9→16, mac-mini→8 > min(lógico, cpu_count), nunca > lógico),
+  `append_ledger` (O_APPEND, escrita única por linha).
+- `v2/baseline_fast_v2.py`: `--extend <linhagem> [--from-step N]` (exige
+  `--target-steps`; recusa `--checkpoint/--resume/--base-steps/--total-timesteps/
+  --minutes`); `LineageCheckpointCallback` escreve `poke_<N>_steps.json` em todo
+  save (run fresca ou extendida); relógio vem do `global_step` do sidecar (não
+  do num_timesteps interno do zip); fixups do acumulador automáticos a partir da
+  geometria do sidecar; `--resume`/`--base-steps` emitem warning de depreciação
+  no stderr; silent-fresh-start aposentado (checkpoint explícito ausente =
+  exit 1); ledger append no `finally` (status completed/failed).
+  **Mapeamento de dir**: linhagem `<nome>` (nome no share e no `--backup`) =
+  dir de sessão local `v2/runs_<nome>/`; `normalize_lineage` aceita as duas
+  formas.
+- `v2/publish_run.sh <linhagem>` (novo): copia zips+sidecars+tfevents
+  (+resource_summary/log, run.json — este último buscado em
+  `baselines/<linhagem>/` quando ausente no dir de sessão) pro share; recusa
+  sem `POKERED_DATA`; nunca deleta; vídeos/states fora.
+- `v2/jobs/030..038_*.json`: campanha t16 s0 19M/27M/35M, declarativos
+  (`--extend <linhagem> --target-steps <abs> --no-stream --save-final-state
+  --backup <linhagem>`), ordem LC_ALL=C = ordem de execução, alvos
+  19.005.440 / 27.033.600 / 35.061.760 (múltiplos de 163.840 e 20.480).
+  NÃO enfileirados. Sem `--physical-envs`: resolve por host (16 no AM18).
+- `v2/jobs/sidecars_t16_s0/<linhagem>/poke_10977280_steps.json`: backfill
+  mínimo dos 3 checkpoints t16 s0 11M (parent t05/t15 @ 1.966.080, seed 0,
+  geometria por braço; `saved_at` aproximado 2026-09-13, marcado
+  `backfilled`). **Staged — operador copia pro share após revisar.**
+- Decisões além da letra da spec: (1) `accumulation_rounds` do sidecar é
+  informativo/validação — a perna nova RECOMPUTA rounds = lógico ÷ físico da
+  máquina (rounds 8 no Mac → 4 no AM18, mega-update 163.840 preservado);
+  (2) `parent` do sidecar = ponto de branch da linhagem (herdado entre
+  pernas), enquanto `parent` do ledger = checkpoint efetivamente retomado
+  (mesma linhagem @ step, para pernas); (3) ledger aceita override
+  `V2_LINEAGE_LEDGER` (testes/scratch); (4) `v2/lineage.jsonl` não casava
+  nenhum pattern do .gitignore, mas ganhou negação explícita `!v2/lineage.jsonl`.
+
+Evidência de teste (AM18, `.venv` py3.12):
+- `pytest v2/tests/` → 17 passed (13 novos em `test_lineage.py`: round-trip,
+  seleção/from-step/overshoot, fallback de share com `POKERED_DATA` fake,
+  hard-fail, contradição, physical cap, ledger, parse dos 9 specs pelo
+  argparse real).
+- E2E real com linhagem descartável `scratch_lg19` (2 envs × n_steps 128):
+  leg1 fresca 0→2.048 → sidecars + ledger linha 1 (parent null); zips locais
+  apagados, checkpoint só no share fake → leg2 `--extend --target-steps 4096`
+  copiou zip+sidecar+tfevents e treinou → checkpoints continuam
+  (`poke_3072_steps`, `poke_4096_steps`), TB contínuo (`train/approx_kl`
+  512→4.096, 0 steps duplicados, sem stitch/offset), ledger 2 linhas
+  (leg2 parent {scratch_lg19, 2048}); `--from-step 3072` escolheu o zip 3.072
+  (não o mais novo); extend sem nada resolvível → exit 1 imediato;
+  `--n-steps 256` contra sidecar 128 → exit 1 com mensagem clara; `--base-steps`
+  → warning de depreciação. Artefatos grandes do scratch limpos (sidecars,
+  tfevents e summaries mantidos em `v2/runs_scratch_lg19/`).
+

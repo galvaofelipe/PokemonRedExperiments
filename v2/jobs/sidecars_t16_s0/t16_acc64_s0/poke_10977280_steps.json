@@ -1,0 +1,32 @@
+{
+  "lineage": "t16_acc64_s0",
+  "global_step": 10977280,
+  "num_envs": 64,
+  "n_steps": 2560,
+  "accumulation_rounds": 8,
+  "seed": 0,
+  "env_config": {
+    "headless": true,
+    "save_final_state": true,
+    "early_stop": false,
+    "early_stop_survival": 0.05,
+    "action_freq": 24,
+    "init_state": "../init.state",
+    "max_steps": 16384,
+    "print_rewards": true,
+    "save_video": false,
+    "fast_video": true,
+    "session_path": "runs_t16_acc64_s0",
+    "gb_path": "../PokemonRed.gb",
+    "debug": false,
+    "reward_scale": 0.5,
+    "explore_weight": 0.25
+  },
+  "parent": {
+    "lineage": "t15_acc64_s0",
+    "step": 1966080
+  },
+  "hostname": "mac-mini",
+  "saved_at": "2026-09-13",
+  "backfilled": "2026-09-14 (ticket 19 staged backfill; zip internal num_timesteps is leg-local 9,011,200)"
+}

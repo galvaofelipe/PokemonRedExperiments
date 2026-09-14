@@ -36,19 +36,32 @@ $POKERED_DATA/pokered/
 
 ## Publishing a run (producer side)
 
-Copy, don't move. Write once; don't edit in place:
+Copy, don't move. Write once; don't edit in place. Since the lineage system
+(ticket 19), the standard way is:
+
+```sh
+v2/publish_run.sh <lineage>   # → $POKERED_DATA/pokered/runs/v2/<lineage>/
+```
+
+It copies zips + lineage sidecars + tfevents + resource files (run.json taken
+from `v2/baselines/<lineage>/` when absent in the session dir), never deletes,
+and refuses to run without a valid `POKERED_DATA`. Manual publishing follows
+the same layout:
 
 ```
 $POKERED_DATA/pokered/runs/v2/<run_name>/   # <run_name> = backup name (e.g. t16_g20480_s0)
-  poke_*_steps.zip                     # checkpoints
+  poke_*_steps.zip + poke_*_steps.json  # checkpoints + lineage sidecars
+  tfevents (poke_ppo_*/, histogram/)    # the lineage's TB curve travels with it
   resource_summary.txt, resource_log.csv
   run.json                             # backup_run() metadata (cli args, seed, host, timesteps)
 ```
 
 Canonical source: `v2/baselines/<run_name>/` (the `--backup` output) — rsync it
-verbatim. Skip tfevents, videos, and per-episode `.state` dumps — mirror what
-`backup_run()` (`v2/baseline_fast_v2.py`) already skips. Small coordination files
-(job specs, ledgers, perf manifests) stay in git, not on the share.
+verbatim. tfevents are included since 2026-09-14 (a lineage = one TB curve;
+scalar event files are small); videos and per-episode `.state` dumps stay out —
+mirror what `backup_run()` (`v2/baseline_fast_v2.py`) already skips. Small
+coordination files (job specs, ledgers, perf manifests) stay in git, not on the
+share.
 
 ## Consuming (other machine)
 

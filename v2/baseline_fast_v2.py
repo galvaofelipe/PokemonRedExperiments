@@ -17,6 +17,16 @@ from stable_baselines3.common.callbacks import CheckpointCallback, CallbackList
 from accumulator_ppo import AccumulatingPPO
 from tensorboard_callback import TensorboardCallback
 from resource_callback import ResourceCallback
+from lineage import (
+    append_ledger,
+    check_contradictions,
+    explicit_flag_dests,
+    local_lineage_dir,
+    normalize_lineage,
+    resolve_extend,
+    resolve_physical_cap,
+    write_sidecar,
+)
 
 # Headless single-env step rate on this machine was ~225 sps.
 # After PPO updates + SubprocVecEnv, budget ~90 sps per env.
@@ -38,7 +48,7 @@ def resolve_geometry(logical_envs: int, physical_envs: int | None) -> tuple[int,
     return physical, logical_envs // physical
 
 
-def parse_args():
+def build_parser():
     p = argparse.ArgumentParser(
         description="Train PPO on Pokemon Red (v2). Override env_config and run length from the CLI."
     )
@@ -87,10 +97,28 @@ def parse_args():
         type=int,
         default=None,
         help=(
-            "Lineage steps the loaded checkpoint represents. Default: num_timesteps "
-            "stored in the zip. Set explicitly for legs trained with "
-            "reset_num_timesteps=True (e.g. Mac t16 zips: 10977280)."
+            "DEPRECATED (ticket 19): the lineage clock now comes from the "
+            "checkpoint sidecar via --extend. Lineage steps the loaded "
+            "checkpoint represents. Default: num_timesteps stored in the zip."
         ),
+    )
+    p.add_argument(
+        "--extend",
+        default=None,
+        metavar="LINEAGE",
+        help=(
+            "Extend a lineage: resume the newest checkpoint sidecar "
+            "(--from-step to pin) from runs_<lineage>/ (falling back to "
+            "$POKERED_DATA/pokered/runs/v2/<lineage>/) and train up to "
+            "--target-steps on the global clock. Geometry, seed and "
+            "env_config come from the sidecar; contradicting flags are an error."
+        ),
+    )
+    p.add_argument(
+        "--from-step",
+        type=int,
+        default=None,
+        help="With --extend: resume the newest checkpoint at or before this global step.",
     )
     p.add_argument(
         "--max-steps",
@@ -110,7 +138,11 @@ def parse_args():
     )
     p.add_argument("--save-freq", type=int, default=None, help="Vec-env steps between checkpoints. Default: max_steps/2.")
     p.add_argument("--checkpoint", default="", help="PPO zip to resume, without the .zip suffix.")
-    p.add_argument("--resume", action="store_true", help="Resume the newest poke_*.zip in --session-path.")
+    p.add_argument(
+        "--resume",
+        action="store_true",
+        help="DEPRECATED (ticket 19): use --extend. Resume the newest poke_*.zip in --session-path.",
+    )
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--use-wandb", action="store_true")
     p.add_argument("--stream", action=argparse.BooleanOptionalAction, default=True)
@@ -141,7 +173,11 @@ def parse_args():
         default="",
         help="After learn(), copy checkpoints/summaries to baselines/NAME. Empty skips.",
     )
-    return p.parse_args()
+    return p
+
+
+def parse_args(argv=None):
+    return build_parser().parse_args(argv)
 
 
 def latest_checkpoint(sess_path: Path) -> str:
@@ -214,6 +250,29 @@ def backup_run(name, sess_path, args, start_ts, end_ts, model, completed):
     print(f"backup written to {dest.resolve()}")
 
 
+class LineageCheckpointCallback(CheckpointCallback):
+    """CheckpointCallback that also writes the lineage sidecar
+    (poke_<N>_steps.json, ticket 19) next to every checkpoint zip, so every
+    run — fresh or extended — leaves self-describing checkpoints."""
+
+    def __init__(self, *args, sidecar_info: dict, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._sidecar_info = sidecar_info
+
+    def _on_step(self) -> bool:
+        due = self.n_calls % self.save_freq == 0
+        keep_going = super()._on_step()
+        if due:
+            # model.num_timesteps here equals the N in the zip filename (it is
+            # already global in --target-steps/--extend mode).
+            write_sidecar(
+                Path(self._checkpoint_path(extension="json")),
+                int(self.model.num_timesteps),
+                self._sidecar_info,
+            )
+        return keep_going
+
+
 def make_env(rank, env_conf, seed=0, stream=True, stream_user="v2-default"):
     def _init():
         env = RedGymEnv(env_conf)
@@ -235,34 +294,87 @@ def make_env(rank, env_conf, seed=0, stream=True, stream_user="v2-default"):
 
 
 if __name__ == "__main__":
-    args = parse_args()
-    sess_path = args.session_path
-    sess_path.mkdir(exist_ok=True)
+    parser = build_parser()
+    args = parser.parse_args()
+    explicit = explicit_flag_dests(parser, sys.argv[1:])
 
-    env_config = {
-        "headless": args.headless,
-        "save_final_state": args.save_final_state,
-        "early_stop": args.early_stop,
-        "early_stop_survival": args.early_stop_survival,
-        "action_freq": args.action_freq,
-        "init_state": args.init_state,
-        "max_steps": args.max_steps,
-        "print_rewards": args.print_rewards,
-        "save_video": args.save_video,
-        "fast_video": args.fast_video,
-        "session_path": sess_path,
-        "gb_path": args.gb_path,
-        "debug": args.debug,
-        "reward_scale": args.reward_scale,
-        "explore_weight": args.explore_weight,
-    }
-
-    env_var = os.environ.get("V2_PHYSICAL_ENVS", "").strip()
-    if args.physical_envs is not None:
-        physical_cap = args.physical_envs
+    extend_sidecar = None
+    if args.extend is not None:
+        if args.target_steps is None:
+            raise SystemExit("--extend requires --target-steps <absolute lineage step count>")
+        for bad, flag in (
+            (bool(args.checkpoint), "--checkpoint"),
+            (args.resume, "--resume"),
+            (args.base_steps is not None, "--base-steps"),
+            (args.total_timesteps is not None, "--total-timesteps"),
+            (args.minutes is not None, "--minutes"),
+        ):
+            if bad:
+                raise SystemExit(
+                    f"--extend: {flag} is not accepted; the checkpoint and the clock come from the lineage sidecar"
+                )
+        lineage = normalize_lineage(args.extend)
+        if "session_path" in explicit and normalize_lineage(args.session_path) != lineage:
+            raise SystemExit(
+                f"--extend: --session-path {args.session_path} is not the lineage dir "
+                f"{local_lineage_dir(lineage)}; every leg writes in the lineage birth dir"
+            )
+        sess_path, file_name, extend_sidecar = resolve_extend(
+            lineage, args.from_step, Path("."), os.environ.get("POKERED_DATA")
+        )
+        errors = check_contradictions(args, explicit, extend_sidecar)
+        if errors:
+            raise SystemExit("\n".join(errors))
+        # Frozen lineage facts come from the sidecar, never from the CLI.
+        args.num_envs = extend_sidecar["num_envs"]
+        args.n_steps = extend_sidecar["n_steps"]
+        args.seed = extend_sidecar["seed"]
+        env_config = dict(extend_sidecar["env_config"])
+        env_config["session_path"] = sess_path  # machine-local path, not a frozen fact
+        for key, value in env_config.items():
+            if hasattr(args, key):
+                setattr(args, key, value)
+        print(
+            f"extend: lineage={lineage} base={extend_sidecar['global_step']} "
+            f"parent={extend_sidecar.get('parent')} checkpoint={file_name}"
+        )
     else:
-        physical_cap = int(env_var) if env_var else None
-    physical_envs, rounds = resolve_geometry(args.num_envs, physical_cap)
+        lineage = normalize_lineage(args.session_path.name)
+        sess_path = args.session_path
+        sess_path.mkdir(exist_ok=True)
+        env_config = {
+            "headless": args.headless,
+            "save_final_state": args.save_final_state,
+            "early_stop": args.early_stop,
+            "early_stop_survival": args.early_stop_survival,
+            "action_freq": args.action_freq,
+            "init_state": args.init_state,
+            "max_steps": args.max_steps,
+            "print_rewards": args.print_rewards,
+            "save_video": args.save_video,
+            "fast_video": args.fast_video,
+            "session_path": sess_path,
+            "gb_path": args.gb_path,
+            "debug": args.debug,
+            "reward_scale": args.reward_scale,
+            "explore_weight": args.explore_weight,
+        }
+        if args.resume:
+            print(
+                "warning: --resume is deprecated (ticket 19); use --extend <lineage> --target-steps <abs>",
+                file=sys.stderr,
+            )
+        if args.base_steps is not None:
+            print(
+                "warning: --base-steps is deprecated (ticket 19); the clock comes from the sidecar under --extend",
+                file=sys.stderr,
+            )
+        file_name = args.checkpoint or (latest_checkpoint(sess_path) if args.resume else stdin_checkpoint())
+
+    physical_envs, rounds = resolve_geometry(
+        args.num_envs,
+        resolve_physical_cap(args.physical_envs, os.environ.get("V2_PHYSICAL_ENVS"), args.num_envs),
+    )
 
     sps = args.sps if args.sps is not None else physical_envs * SPS_PER_ENV
     if args.target_steps is not None and (args.total_timesteps is not None or args.minutes is not None):
@@ -277,7 +389,14 @@ if __name__ == "__main__":
     n_steps = args.n_steps if args.n_steps is not None else args.max_steps // 64
 
     save_freq = args.save_freq if args.save_freq is not None else args.max_steps // 2
-    file_name = args.checkpoint or (latest_checkpoint(sess_path) if args.resume else stdin_checkpoint())
+
+    if file_name and not exists(file_name + ".zip"):
+        raise SystemExit(
+            f"checkpoint not found: {file_name}.zip — refusing to start fresh "
+            "(ticket 19 retired the silent fresh start)"
+        )
+    if (args.checkpoint or args.resume) and not file_name:
+        raise SystemExit("--checkpoint/--resume requested but no checkpoint was found")
 
     print(env_config)
     print(
@@ -300,8 +419,20 @@ if __name__ == "__main__":
         ]
     )
 
+    sidecar_info = {
+        "lineage": lineage,
+        "num_envs": args.num_envs,
+        "n_steps": n_steps,
+        "accumulation_rounds": rounds,
+        "seed": args.seed,
+        "env_config": {k: (str(v) if isinstance(v, Path) else v) for k, v in env_config.items()},
+        # Legs inherit the lineage's branch point; a fresh run starts a
+        # parentless lineage.
+        "parent": extend_sidecar["parent"] if extend_sidecar is not None else None,
+    }
+
     callbacks = [
-        CheckpointCallback(save_freq=save_freq, save_path=sess_path, name_prefix="poke"),
+        LineageCheckpointCallback(save_freq=save_freq, save_path=sess_path, name_prefix="poke", sidecar_info=sidecar_info),
         TensorboardCallback(sess_path),
         ResourceCallback(sess_path, num_envs=physical_envs, action_freq=args.action_freq),
     ]
@@ -335,8 +466,6 @@ if __name__ == "__main__":
         if rounds > 1:
             model.accumulation_rounds = rounds
     else:
-        if file_name:
-            print(f"checkpoint not found: {file_name}.zip (starting fresh)")
         model = ppo_cls(
             "MultiInputPolicy",
             env,
@@ -353,8 +482,14 @@ if __name__ == "__main__":
     reset_num_timesteps = True
     if args.target_steps is not None:
         if not (file_name and exists(file_name + ".zip")):
-            raise SystemExit("--target-steps requires a loadable checkpoint (--checkpoint/--resume/stdin)")
-        base_steps = args.base_steps if args.base_steps is not None else model.num_timesteps
+            raise SystemExit("--target-steps requires a loadable checkpoint (--extend/--checkpoint/--resume/stdin)")
+        if extend_sidecar is not None:
+            # The zip's internal num_timesteps may be leg-local (e.g. the Mac
+            # t16 zips store 9,011,200 for global step 10,977,280); the
+            # sidecar's global_step is the lineage clock.
+            base_steps = extend_sidecar["global_step"]
+        else:
+            base_steps = args.base_steps if args.base_steps is not None else model.num_timesteps
         additional = args.target_steps - base_steps
         if additional <= 0:
             raise SystemExit(
@@ -390,3 +525,20 @@ if __name__ == "__main__":
             run.finish()
         if args.backup:
             backup_run(args.backup, sess_path, args, start_ts, end_ts, model, completed)
+        append_ledger(
+            {
+                "name": args.backup or sess_path.name,
+                "lineage": lineage,
+                "parent": (
+                    {"lineage": lineage, "step": extend_sidecar["global_step"]}
+                    if extend_sidecar is not None
+                    else None
+                ),
+                "target_steps": args.target_steps if args.target_steps is not None else total_timesteps,
+                "seed": args.seed,
+                "hostname": socket.gethostname(),
+                "start": start_ts,
+                "end": end_ts,
+                "status": "completed" if completed else "failed",
+            }
+        )

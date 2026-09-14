@@ -10,6 +10,13 @@ histogram/). With no TAG, lists available tags. With TAGs, prints one
 line per point: tag<TAB>step<TAB>value
 Values in this repo's event files live in v.tensor.float_val, not
 simple_value; EventAccumulator handles both.
+
+Lineage note (ticket 19, 2026-09-14): runs trained under the lineage system
+(every leg via --extend, global clock) extract CONTINUOUS series 0 -> total
+from the lineage dir — no manual +offset shifting and no tb_stitch.py. The
+offset trick is only still needed for pre-2026-09-14 legs trained with
+reset_num_timesteps=True (e.g. the Mac t16 s1/s2 legs before the global
+clock landed).
 """
 import sys
 from pathlib import Path

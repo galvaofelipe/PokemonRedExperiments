@@ -37,3 +37,6 @@ v3/milestones.jsonl
 v3/champion.json
 v3/champion/
 v2/.tb_logs/
+# v2/lineage.jsonl is the lineage ledger (ticket 19): coordination data that
+# MUST stay committed alongside the job specs, unlike the run data above.
+!v2/lineage.jsonl
