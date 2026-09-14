@@ -45,3 +45,11 @@ ticket 18.
 Relacionado: 18 (decisão de dieta), 07 (medições AM18), 06 (desenho do acumulador).
 
 ## Comments
+
+- 2026-09-13 (re-bench acc64_p16 pós-`.wslconfig` 27 GB/32 GB swap): evidência
+  direta pra alavanca do `del` de round buffers. Run de 1 mega-update: pico de
+  PSS **18,8 GB** (`v2/bench/geo_acc64_p16_swapcheck`). A mesma geometria com 2
+  mega-updates: pico **26,0 GB**. Delta ~7 GB = round buffers da mega-update
+  anterior vivos durante a seguinte (suspeita 4 do ticket). Também: SPS da
+  1ª mega-update ~1000 vs ~919 em 2 — o pico de train cheio custa SPS mesmo sem
+  thrash de swap. CSVs: `v2/bench/mem_watch_acc64_p16_27gb{,_2mu}.csv`.

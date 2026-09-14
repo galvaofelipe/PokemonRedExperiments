@@ -16,7 +16,7 @@ from Git Bash call `MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' wsl.exe -d Ubuntu
 
 ## Tower share (done, standardized)
 
-- `POKERED_DATA=$(scripts/ensure_tower.sh)` — mounts at `~/mnt/tower`, idempotent,
+- `POKERED_DATA=$(scripts/ensure_tower.sh)` — mounts at `~/mnt/tower/data`, idempotent,
   probes LAN then falls back to `tower.ide-pogona.ts.net` (time-bounded).
   Currently mounted via the tailnet name. LAN 192.168.0.9 accepts :445 but stalled
   SMB once (possibly fixed: operator switched Windows network to Private — retest
@@ -66,15 +66,12 @@ from Git Bash call `MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' wsl.exe -d Ubuntu
 
 ## Open threads
 
-- **`.wslconfig` upgrade (operator, needs `wsl --shutdown` — apply between
-  sessions):** `memory=26GB`, `swap=32GB` (swap is a sparse VHDX on the Windows
-  drive; only consumes disk as used — needs headroom on C:). 26/32 absorbs the
-  acc64 peak (~27.6 GB demand) slow-not-crashed; go `memory=27GB`–`28GB` if the
-  BIOS UMA shrink below lands. If the box is used as a desktop while training,
-  stay at 24–26 GB memory so Windows keeps 4+ GB.
-- **BIOS: 4 GB hardware-reserved RAM** = iGPU UMA framebuffer (Radeon 780M;
-  workload is headless). Look for "UMA Frame Buffer Size" / "iGPU Memory" (often
-  Advanced → AMD CBS → NBIO → GFX). 1–2 GB is plenty; frees 2–3 GB system RAM.
+- **DONE — `.wslconfig` upgrade:** applied at `memory=27GB`, `swap=32GB` (WSL
+  sees 26 GiB + 32 GiB). Re-bench of acc64_p16 under the new config is in
+  `docs/perf/am18.md` — still swaps ~6 GB at the train peak (~886–919 SPS);
+  acc40_p20 remains the production pick. Ticket 22 explores alternatives.
+- **DONE — BIOS UMA shrink:** 4 GB hardware-reserved freed; Windows now reports
+  30.8 GB RAM.
 - **Ticket 21**: audit where the accumulator's ~105 KB/sample goes (obs space is
   ~21.6 KB) — dtype casts, train-phase transients, allocator fragmentation.
 - cursor-delegate MCP untested in WSL (needs cursor-agent CLI; `doctor` deep:true).
