@@ -46,6 +46,8 @@ def arg_map(args: list[str]) -> dict[str, str | bool]:
 
 
 def planned_steps(amap: dict[str, str | bool]) -> int | None:
+    if "target-steps" in amap:
+        return int(amap["target-steps"])
     if "total-timesteps" in amap:
         return int(amap["total-timesteps"])
     if "minutes" in amap:
@@ -53,6 +55,36 @@ def planned_steps(amap: dict[str, str | bool]) -> int | None:
         if sps:
             return int(float(amap["minutes"]) * 60 * sps)
     return None
+
+
+def job_session(amap: dict[str, str | bool]) -> str:
+    session = str(amap.get("session-path") or "")
+    if session:
+        return session
+    extend = amap.get("extend")
+    if extend and extend is not True:
+        name = str(extend)
+        if name.startswith("runs_"):
+            name = name[len("runs_"):]
+        return f"runs_{name}"
+    return ""
+
+
+def sidecar_recipe(session: str) -> dict:
+    """Newest lineage sidecar in the local run dir, if one exists (ticket 19)."""
+    folder = ROOT / session
+    if not session or not folder.is_dir():
+        return {}
+    best = None
+    for path in folder.glob("poke_*_steps.json"):
+        try:
+            data = json.loads(path.read_text())
+        except (ValueError, OSError):
+            continue
+        step = data.get("global_step")
+        if isinstance(step, int) and (best is None or step > best[0]):
+            best = (step, data)
+    return best[1] if best else {}
 
 
 def job_recipe(amap: dict[str, str | bool]) -> dict:
@@ -108,7 +140,7 @@ def load_jobs() -> list[dict]:
             state = status.get("state") or fallback
             if folder.name in {"done", "failed"}:
                 state = folder.name
-            session = str(amap.get("session-path") or "")
+            session = job_session(amap)
             csv_path = ROOT / session / "resource_log.csv" if session else None
             series = load_series(csv_path) if csv_path else []
             perf = series[-1] if series else {}
@@ -121,6 +153,11 @@ def load_jobs() -> list[dict]:
             except (TypeError, ValueError):
                 assumed_sps = 720.0
             recipe = job_recipe(amap)
+            if amap.get("extend"):
+                sidecar = sidecar_recipe(session)
+                recipe["num_envs"] = _as_int(sidecar.get("num_envs")) or recipe["num_envs"]
+                recipe["n_steps"] = _as_int(sidecar.get("n_steps")) or recipe["n_steps"]
+                recipe["rollout"] = recipe["n_steps"] * recipe["num_envs"]
             rollout = recipe["rollout"]
             planned_updates = math.ceil(target / rollout) if target and rollout else None
             updates = steps // rollout if steps is not None and rollout else None

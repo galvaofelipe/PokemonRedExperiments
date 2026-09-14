@@ -6,6 +6,8 @@
     "--target-steps",
     "35061760",
     "--no-stream",
+    "--physical-envs",
+    "16",
     "--save-final-state",
     "--backup",
     "t16_acc64_s0"

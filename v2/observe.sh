@@ -25,6 +25,8 @@ TB_PORT="${TB_PORT:-6006}"
 
 # name<TAB>session-path for each job, queued or already done (done jobs keep
 # their runs visible in tensorboard for comparison)
+# Session dirs: prefer --session-path; for --extend <lineage> derive runs_<lineage>
+# (same rule as watch_progress.job_session — extend jobs omit --session-path).
 jobs_tsv="$("$PYTHON" - <<'EOF'
 import json
 from pathlib import Path
@@ -45,11 +47,23 @@ def arg_map(args):
             i += 1
     return out
 
+def job_session(amap):
+    session = str(amap.get("--session-path") or "")
+    if session:
+        return session
+    extend = amap.get("--extend")
+    if extend and extend is not True:
+        name = str(extend)
+        if name.startswith("runs_"):
+            name = name[len("runs_"):]
+        return f"runs_{name}"
+    return ""
+
 jobs = Path("jobs")
 paths = sorted(jobs.glob("*.json")) + sorted((jobs / "done").glob("*.json"))
 for path in paths:
     job = json.loads(path.read_text())
-    session = arg_map(job.get("args") or []).get("--session-path", "")
+    session = job_session(arg_map(job.get("args") or []))
     if session:
         print(f"{job['name']}\t{session}")
 

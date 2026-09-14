@@ -186,6 +186,7 @@ class ResourceCallback(BaseCallback):
         self.peak_rss_mb = 0.0
         self.peak_footprint_mb = 0.0
         self.peak_cpu = 0.0
+        self.start_steps = 0
         self.samples = []
         self._cpu_state: dict = {}
         self._lock = threading.Lock()
@@ -195,7 +196,10 @@ class ResourceCallback(BaseCallback):
     def _on_training_start(self):
         self.t0 = time.monotonic()
         self.last_t = self.t0
-        self.last_steps = 0
+        # Leg clock (ticket 19): an --extend leg starts num_timesteps at the
+        # lineage base, so rates and instant deltas measure from there.
+        self.start_steps = int(self.model.num_timesteps)
+        self.last_steps = self.start_steps
         self.log_path.parent.mkdir(exist_ok=True)
         if not self.log_path.exists() or self.log_path.stat().st_size == 0:
             with self.log_path.open("w", newline="") as f:
@@ -229,11 +233,12 @@ class ResourceCallback(BaseCallback):
         now = time.monotonic()
         wall_s = now - self.t0
         steps = int(self.model.num_timesteps)
+        leg_steps = steps - self.start_steps
         dt = max(now - self.last_t, 1e-6)
         instant_sps = (steps - self.last_steps) / dt
-        avg_sps = steps / max(wall_s, 1e-6)
+        avg_sps = leg_steps / max(wall_s, 1e-6)
         game_s = steps * self.action_freq / GB_FPS
-        per_env_game_s = game_s / max(self.num_envs, 1)
+        per_env_game_s = (leg_steps * self.action_freq / GB_FPS) / max(self.num_envs, 1)
         per_env_speedup = per_env_game_s / max(wall_s, 1e-6)
         rss_mb, footprint_mb, cpu_pct, n_procs = process_tree_stats(self.root_pid, self._cpu_state)
         self.peak_rss_mb = max(self.peak_rss_mb, rss_mb)

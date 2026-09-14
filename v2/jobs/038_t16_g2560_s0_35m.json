@@ -6,6 +6,8 @@
     "--target-steps",
     "35061760",
     "--no-stream",
+    "--physical-envs",
+    "8",
     "--save-final-state",
     "--backup",
     "t16_g2560_s0"
