@@ -122,3 +122,16 @@ unique_maps seguem tickando). Falta pro veredito: operador no TB (judgement
 call) + fase 2 (s1/s2, 6 runs, ~24h de fila) pra mediana. Preparar jobs da fase
 2 = mesmo modelo dos 022–024 trocando seed e paths (checkpoints de 2M de s1/s2
 já verificados em todos os dirs).
+
+**2026-09-13 ~22:05 — jobs da fase 2 preparados e validados (agente).**
+`v2/jobs/024_t16_acc64_s1.json` … `029_t16_g2560_s2.json` (6 jobs; ordem de fila:
+s1 acc64→B→A, depois s2). Usam o mecanismo NOVO de resume-global (commit 696169a):
+`--target-steps 10977280` sem `--total-timesteps` — base vem do zip
+(t05/t15 guardam 1.966.080 global), additional=9.011.200 exato nos 3 braços, e
+TB/checkpoints da leg2 saem no session-path novo já em steps globais → **sem
+tb_stitch nem offset na extração** (basta concatenar leg1 do dir t05/t15 +
+leg2 do dir t16, mesma escala, flags = `event ÷ 2`). Validados pelo parser real:
+geometria, checkpoints s1/s2 de 2M existem nos 6 paths. Fila parada (024 s0
+consumido). Operador roda `cd v2 && ./run_queue.sh` (~3,5–4h por run, ~21–24h
+total). Checkpoints seed-0 publicados no tower share
+(`pokered/runs/v2/t16_{acc64,g20480,g2560}_s0`).

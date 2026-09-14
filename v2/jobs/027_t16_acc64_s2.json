@@ -1,0 +1,16 @@
+{
+  "name": "t16_acc64_s2",
+  "args": [
+    "--num-envs", "64",
+    "--physical-envs", "8",
+    "--n-steps", "2560",
+    "--max-steps", "16384",
+    "--target-steps", "10977280",
+    "--seed", "2",
+    "--no-stream",
+    "--save-final-state",
+    "--checkpoint", "runs_t15_acc64_s2/poke_1966080_steps",
+    "--session-path", "runs_t16_acc64_s2",
+    "--backup", "t16_acc64_s2"
+  ]
+}
