@@ -16,7 +16,8 @@
 #   TOWER_USER   smb user (default: galvaofelipe)
 #   TOWER_MNT    mount base (default: ~/mnt/tower); the share mounts at
 #                $TOWER_MNT/$TOWER_SHARE, i.e. ~/mnt/tower/data by default
-#   SMB_PASS     smb password; if unset the mount tool prompts interactively.
+#   SMB_PASS     smb password; if unset on Linux the script itself prompts on
+#                the tty (mount.cifs's own prompt deadlocks under sudo timeout).
 #                (macOS: special chars in SMB_PASS need URL-encoding.)
 #
 # Linux requires cifs-utils and root for the mount itself — the script calls
@@ -31,10 +32,9 @@ err() { printf '%s\n' "$*" >&2; }
 
 print_failure_hints() {
   local host="$1"
-  err "  Causes seen so far: (1) unanswered sudo/SMB password prompt — mount.cifs"
-  err "  prompts on the tty and the run dies silently at the 90s timeout (export"
-  err "  SMB_PASS to skip the prompt); (2) server accepts :445 then stalls the"
-  err "  SMB negotiation. Manual retry with a visible prompt:"
+  err "  Causes seen so far: (1) wrong SMB password; (2) server accepts :445"
+  err "  then stalls the SMB negotiation (timeout kills the attempt at 30s)."
+  err "  Manual retry with mount.cifs's own prompt:"
   err "    sudo mount -t cifs //$host/$SHARE_NAME $MNT -o username=$SHARE_USER,vers=3.0,uid=$(id -u),gid=$(id -g),iocharset=utf8"
 }
 
@@ -86,19 +86,25 @@ else
     exit 1
   }
 
+  # mount.cifs's own password prompt deadlocks under `sudo timeout` (the child
+  # lands in a background process group and its tty read blocks silently until
+  # the timeout kills it) — prompt here, in the foreground, and pass password=
+  # to the mount instead.
+  if [[ -z "${SMB_PASS:-}" && -t 0 ]]; then
+    read -rsp "SMB password for $SHARE_USER@$HOST: " SMB_PASS
+    printf '\n' >&2
+  fi
+  if [[ -z "${SMB_PASS:-}" ]]; then
+    err "ERROR: SMB_PASS unset and no tty to prompt on — export SMB_PASS first."
+    exit 1
+  fi
+
   try_mount() {
     local host="$1"
     local opts="username=$SHARE_USER,vers=3.0,uid=$(id -u),gid=$(id -g),iocharset=utf8,file_mode=0755,dir_mode=0755"
     # Bounded so a host that accepts :445 but stalls SMB negotiation fails
-    # fast instead of hanging forever; interactive runs get room to type the
-    # SMB password at the mount.cifs prompt.
-    local limit=20
-    if [[ -z "${SMB_PASS:-}" ]]; then limit=90; fi
-    if [[ -n "${SMB_PASS:-}" ]]; then
-      sudo timeout -k 5 "$limit" mount -t cifs "//$host/$SHARE_NAME" "$MNT" -o "$opts,password=$SMB_PASS"
-    else
-      sudo timeout -k 5 "$limit" mount -t cifs "//$host/$SHARE_NAME" "$MNT" -o "$opts"
-    fi
+    # fast instead of hanging forever.
+    sudo timeout -k 5 30 mount -t cifs "//$host/$SHARE_NAME" "$MNT" -o "$opts,password=$SMB_PASS"
   }
 
   if ! try_mount "$HOST"; then
