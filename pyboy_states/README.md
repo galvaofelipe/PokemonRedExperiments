@@ -33,3 +33,9 @@ git add pyboy_states/ && git commit --no-verify   # Frozen paths only
 python v3/bin/rehash_frozen_manifest.py
 git add v3/frozen_manifest.sha256 && git commit --no-verify
 ```
+
+
+PS: 
+- Squirtle.state has pokedex and 5 pokeball
+- Bulbasaur.state has pokedex and 5 pokeball
+- Charmander.state has pokedex and 5 pokeball

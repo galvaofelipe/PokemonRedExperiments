@@ -132,6 +132,11 @@ v3, runbook AM18. Não é: rodar a 440M até o fim, refatorar a v2, nem corrigir
   chamada está comentada e ainda dumpa jpeg. Ticket: uma `\r` line de
   `agent_stats` (step/map/mmp/badge/…) no stdout do watch do `poke_26214400`.
   Motivação: o watch de 2026-09-12 só confirmou Brock/Mt. Moon via trainer card.
+- [24 — t16_acc64_s0 @ ~19M: parede pós-Pokédex em Viridian](issues/24-t16-acc64-s0-viridian-wall.md) —
+  campanha 64×2560 (Mac+AM18) satura `mmp=3` / `event=30` / 0 badges; `dex_seen`
+  **não** implica Pokédex (pret marca seen em todo battle); os 15 bits de
+  `event=30` **incluem** Got Pokedex + parcel. Wall = não entra Route 2. Follow-up
+  Discord/ckpt do autor no Mac.
 
 ## Not yet specified
 
