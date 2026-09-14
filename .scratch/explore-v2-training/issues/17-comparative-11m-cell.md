@@ -96,3 +96,29 @@ ausência de depth é o gargalo visível. Braço B rodou já com a telemetria de
 footprint nova: pico reportado ~29GB (8 envs stock) — dado pro ticket 18
 (footprint inclui retenção de malloc; comparar com medição externa).
 Falta: A (024, ETA ~21:20) + fase 2 (s1/s2) pro veredito na mediana.
+
+**2026-09-13 ~21:45 — prévia seed 0 braço A + tabela 3 braços (agente; run A terminou 21:14, 3h22m wall, 743 sps).**
+Stitch A validado (0→10.977.280). A @11M (cutoff): flags 9/coord 1.323/maps 12/dex 7/levels 8/mmp 3;
+max-along-run: **flags 15**, coord 1.395, levels 12, maps 12. Saúde ✓ (KL med 0,0053,
+EV 0,77, 0 wipes). **Correção à leitura de ~18:20**: `env_stats_max` reseta por
+episódio — comparar nos valores de cutoff superestimou a separação. Nos marcos de
+max-along-time, os 3 braços destravaram flags tarde e em sequência parecida:
+A 9→13→15 em 6,8/7,5/**9,2M**; B 9→12→13 em 6,1/7,0/9,0M (estacionou); acc64
+9→13→15 em 6,1/9,8/10,0M. **A destravou 15 flags ANTES do acc64** — a forma
+côncava do A em 2M não era platô. unique_maps: A 12 @8,7M, B 12 @9,3M, acc64 13
+@10,6M (único no 13).
+
+**Leitura seed 0 (prévia, não veredito)**: MUST 1 ✓ — acc64 no topo do spread,
+empatado com A (flags 15=15, coord ~1.390≈1.383, maps 13>12, levels 14>12).
+MUST 2 ✓ — dose-resposta viva nos 3 no último terço (max-along: A 9→15, B 9→13,
+acc64 9→15). MUST 3 ✓ — saúde limpa nos 3, 0 wipes. SHOULD 1 — catch-up
+confirmado: o "deficit" do acc64 em 2M era transitório; em 11M empata com A.
+Bônus inesperado: a tese "forma limitada por contagem de updates" enfraquece —
+com 538 updates A não estagnou; todos convergem pra vizinhança parecida em 11M.
+SHOULD 2 — pisos N2 passam nos 3 braços; **projeção mmp NÃO fecha**: mmp 3
+travado desde ~2–3M nos 3 (breadth > depth confirmado: maps 12–13, dex 7,
+pcount 1, ninguém pegou a pokédex; a muralha é depth, não breadth — flags e
+unique_maps seguem tickando). Falta pro veredito: operador no TB (judgement
+call) + fase 2 (s1/s2, 6 runs, ~24h de fila) pra mediana. Preparar jobs da fase
+2 = mesmo modelo dos 022–024 trocando seed e paths (checkpoints de 2M de s1/s2
+já verificados em todos os dirs).
