@@ -29,6 +29,15 @@ MNT="${TOWER_MNT:-$HOME/mnt/tower}/$SHARE_NAME"
 
 err() { printf '%s\n' "$*" >&2; }
 
+print_failure_hints() {
+  local host="$1"
+  err "  Causes seen so far: (1) unanswered sudo/SMB password prompt — mount.cifs"
+  err "  prompts on the tty and the run dies silently at the 90s timeout (export"
+  err "  SMB_PASS to skip the prompt); (2) server accepts :445 then stalls the"
+  err "  SMB negotiation. Manual retry with a visible prompt:"
+  err "    sudo mount -t cifs //$host/$SHARE_NAME $MNT -o username=$SHARE_USER,vers=3.0,uid=$(id -u),gid=$(id -g),iocharset=utf8"
+}
+
 lan_reachable() {
   if [[ "$(uname -s)" == "Darwin" ]]; then
     # macOS has no GNU timeout; nc -G bounds the connect attempt.
@@ -99,8 +108,14 @@ else
       err "mount via $HOST failed — falling back to tower.ide-pogona.ts.net"
       HOST="tower.ide-pogona.ts.net"
       err "mounting //$HOST/$SHARE_NAME at $MNT (user $SHARE_USER)"
-      try_mount "$HOST"
+      if ! try_mount "$HOST"; then
+        err "ERROR: mount via tailnet also failed (see hints below)."
+        print_failure_hints "$HOST"
+        exit 1
+      fi
     else
+      err "ERROR: mount of //$HOST/$SHARE_NAME failed."
+      print_failure_hints "$HOST"
       exit 1
     fi
   fi
