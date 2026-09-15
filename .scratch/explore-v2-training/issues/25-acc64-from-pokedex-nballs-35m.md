@@ -1,7 +1,7 @@
 # 25 — acc64 @ 35M from `has_pokedex_nballs.state` (skip Oak/parcel)
 
 Type: task
-Status: ready-for-human
+Status: resolved
 Blocked by: —
 
 ## Question
@@ -56,7 +56,21 @@ and the explore map.
 - Do **not** treat this as a full author repro: different init than v2’s `init.state`
   run to SS Anne; it is a controlled ablation of the early story.
 
+## Answer
+
+Rodou overnight no AM18 (job 039 → `done/`). Lineage ledger:
+`completed`, `target_steps` 35 061 760, wall ~18:55→03:46 (−03). Publicado em
+`$POKERED_DATA/pokered/runs/v2/t25_acc64_dexballs_s0/` (538 files: zips até
+`34996224`, tfevents, `resource_log.csv`, `run.json`).
+
+**Resultado: badge nunca saiu de 0.** Mesma leitura do ticket 24 — wall pós-dex
+(Route 2 / Brock não vieram só por pular Oak/parcel). A hipótese “cold start /
+parcel é o gargalo” **não** se sustenta neste ablativo; follow-up continua no
+fio Discord / ckpt do autor (ticket 24).
+
 ## Comments
 
 - 2026-09-14: ticket + job authored on AM18 while operator continues ticket 24 on
   the Mac. Job not launched by the agent.
+- 2026-09-15: run completed; operator confirmed no badge; published to share;
+  queue job 039 removed from `v2/jobs/` (lives in gitignored `done/`).

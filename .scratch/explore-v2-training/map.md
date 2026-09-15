@@ -138,8 +138,9 @@ v3, runbook AM18. Não é: rodar a 440M até o fim, refatorar a v2, nem corrigir
   `event=30` **incluem** Got Pokedex + parcel. Wall = não entra Route 2. Follow-up
   Discord/ckpt do autor no Mac.
 - [25 — acc64 @ 35M from has_pokedex_nballs](issues/25-acc64-from-pokedex-nballs-35m.md) —
-  ablação overnight: mesma geometria autor (64×2560, p16), init com dex+balls,
-  um job até 35M (`039_…`). Testa se a parede é pós-dex.
+  ablação overnight **resolvida**: mesma geometria, init dex+balls, 35M, **badge=0**.
+  Wall pós-dex confirmada; cold-start/parcel não era o gargalo.
+
 
 ## Not yet specified
 
